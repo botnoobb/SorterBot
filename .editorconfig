@@ -1,0 +1,22 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = tab
+
+# GDScript: табуляция, ширина таба — 4 пробела
+[*.gd]
+indent_size = 4
+
+# Файлы Godot (сцены, ресурсы, конфиг) — табуляция
+[*.{tscn,tres,godot,cfg}]
+indent_style = tab
+
+# Markdown: пробелы в начале строки, хвостовые пробелы значимы
+[*.md]
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = false
