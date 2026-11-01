@@ -1,3 +1,6 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Логи локальных запусков и проверок
+/.scratch/**/*.log
