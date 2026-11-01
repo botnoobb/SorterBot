@@ -1,14 +1,14 @@
 extends RefCounted
 class_name Token
 
-enum Type {
-	INTEGER,
-}
+enum Type { IDENTIFIER, STRING, LEFT_PAREN, RIGHT_PAREN, NEWLINE, END }
 
 var type: Type
-var value: int
+var text: String
+var line: int
 
 
-func _init(token_type: Type, token_value: int) -> void:
+func _init(token_type: Type, token_text: String, source_line: int) -> void:
 	type = token_type
-	value = token_value
+	text = token_text
+	line = source_line

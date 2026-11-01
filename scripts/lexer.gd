@@ -1,51 +1,57 @@
 extends RefCounted
 class_name Lexer
 
-
-# Читает строку из цифр. Если строка пустая или содержит другие символы,
-# возвращает null вместо токена.
-func read_number(source: String) -> Token:
-	var position: int = 0
-	var number_text: String = ""
-
-	while position < source.length():
-		var character: String = source[position]
-		if not character.is_valid_int():
-			return null
-
-		number_text += character
-		position += 1
-
-	if number_text.is_empty():
-		return null
-
-	return Token.new(Token.Type.INTEGER, number_text.to_int())
+var error_message: String = ""
 
 
-# Читает целые числа, разделённые обычными пробелами.
-# Для пустого ввода или неподдерживаемых символов возвращает пустой массив.
 func tokenize(source: String) -> Array[Token]:
+	error_message = ""
 	var tokens: Array[Token] = []
+	var text: String = source.replace("\r\n", "\n").replace("\r", "\n")
 	var position: int = 0
-
-	while position < source.length():
-		if source[position] == " ":
+	var line: int = 1
+	while position < text.length():
+		var character: String = text[position]
+		if character == " " or character == "\t":
 			position += 1
 			continue
-
-		var number_text: String = ""
-		while position < source.length():
-			var character: String = source[position]
-			if not character.is_valid_int():
-				break
-
-			number_text += character
+		if character == "\n":
+			tokens.append(Token.new(Token.Type.NEWLINE, character, line))
+			line += 1
+		elif character == "(" or character == ")":
+			var type: Token.Type = Token.Type.LEFT_PAREN
+			if character == ")":
+				type = Token.Type.RIGHT_PAREN
+			tokens.append(Token.new(type, character, line))
+		elif character == "\"" or character == "'":
+			var quote: String = character
 			position += 1
-
-		var token: Token = read_number(number_text)
-		if token == null:
+			var start: int = position
+			while position < text.length() and text[position] != quote:
+				if text[position] == "\n":
+					break
+				position += 1
+			if position == text.length() or text[position] != quote:
+				error_message = "Строка %d: закройте строковый аргумент кавычкой %s." % [line, quote]
+				return []
+			tokens.append(Token.new(Token.Type.STRING, text.substr(start, position - start), line))
+		elif _is_letter(character):
+			var start: int = position
+			while position < text.length() and _is_letter(text[position]):
+				position += 1
+			tokens.append(Token.new(Token.Type.IDENTIFIER, text.substr(start, position - start), line))
+			continue
+		else:
+			error_message = "Строка %d: неподдерживаемый символ «%s»." % [line, character]
 			return []
-
-		tokens.append(token)
-
+		position += 1
+	tokens.append(Token.new(Token.Type.END, "", line))
 	return tokens
+
+
+func _is_letter(character: String) -> bool:
+	return (
+		(character >= "a" and character <= "z")
+		or (character >= "A" and character <= "Z")
+		or character == "_"
+	)
