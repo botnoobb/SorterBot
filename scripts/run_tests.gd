@@ -4,6 +4,7 @@ var _failures: int = 0
 var _checks: int = 0
 var _moves: Array[Vector2i] = []
 var _action_running: bool = false
+var _started_lines: Array[int] = []
 
 
 func _initialize() -> void:
@@ -52,7 +53,8 @@ func _test_parser() -> void:
 func _test_execution() -> void:
 	var parser := ProgramParser.new()
 	var executor := ProgramExecutor.new()
-	var commands: Array[MoveCommand] = parser.parse("move('up')\nmove('right')")
+	executor.step_started.connect(_record_step)
+	var commands: Array[MoveCommand] = parser.parse("move('up')\n\nmove('right')")
 	executor.run(commands, _record_move)
 	_expect(executor.is_running, "Выполнение началось")
 	var accepted: bool = await executor.run(commands, _record_move)
@@ -61,11 +63,18 @@ func _test_execution() -> void:
 		await process_frame
 	_expect(_moves == [Vector2i.UP, Vector2i.RIGHT], "Порядок команд сохранён")
 	_expect(not _action_running, "Последнее действие завершено")
+	_expect(_started_lines == [1, 3], "Шаги используют номера строк исходного кода")
 	accepted = await executor.run([], _record_move)
 	_expect(accepted and not executor.is_running, "Пустая программа завершается")
 
 
-func _record_move(direction: Vector2i) -> void:
+func _record_step(line: int) -> void:
+	_expect(not _action_running, "Подсветка меняется после завершения действия")
+	_started_lines.append(line)
+
+
+func _record_move(direction: Vector2i, duration: float) -> void:
+	_expect(is_equal_approx(duration, 0.35), "Исполнитель передаёт длительность шага")
 	_expect(not _action_running, "Действия не перекрываются")
 	_action_running = true
 	await create_timer(0.01).timeout
@@ -88,8 +97,17 @@ func _test_scene() -> void:
 	code.text = "move('up')\nmove(\"right\")"
 	button.pressed.emit()
 	_expect(button.disabled, "Кнопка блокируется на время выполнения")
+	_expect(code.get_line_background_color(0).a > 0, "Первая строка подсвечена")
+	await create_timer(0.1).timeout
+	_expect(robot.cell == Vector2i.ZERO, "Шаг не заканчивается раньше анимации")
+	_expect(robot.position.z < 0 and robot.position.z > -1, "Движение идёт внутри шага")
+	while robot.cell == Vector2i.ZERO:
+		await process_frame
+	_expect(code.get_line_background_color(0).a == 0, "Подсветка первой строки снята")
+	_expect(code.get_line_background_color(1).a > 0, "Вторая строка подсвечена")
 	while button.disabled:
 		await process_frame
+	_expect(code.get_line_background_color(1).a == 0, "Подсветка снята после программы")
 	_expect(robot.cell == Vector2i(1, -1), "Кнопка запуска перемещает робота")
 	_expect(robot.position.is_equal_approx(Vector3(1, 0, -1)), "Положение в 3D")
 	code.text = "move('up')\nmove('wrong')"
@@ -101,6 +119,14 @@ func _test_scene() -> void:
 	while button.disabled:
 		await process_frame
 	_expect(robot.cell == Vector2i(0, -1), "Повторный запуск сохраняет положение")
+	code.text = "\n".repeat(80) + "move('up')"
+	button.pressed.emit()
+	await process_frame
+	_expect(code.get_line_background_color(80).a > 0, "Подсветка после пустых строк")
+	_expect(code.get_first_visible_line() > 0, "Редактор прокручивается к выполняемой строке")
+	while button.disabled:
+		await process_frame
+	_expect(code.get_line_background_color(80).a == 0, "Повторный запуск очищает подсветку")
 	game.queue_free()
 	await process_frame
 
