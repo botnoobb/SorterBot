@@ -15,6 +15,7 @@ func _run() -> void:
 	_test_parser()
 	_test_print_parser()
 	await _test_execution()
+	await _test_diagnostics()
 	await _test_scene()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -25,7 +26,7 @@ func _test_parser() -> void:
 	var commands: Array[ProgramCommand] = parser.parse(
 		"move(\"up\")\nmove('down')\nmove(\"left\")\nmove('right')"
 	)
-	_expect(parser.error_message.is_empty(), "Оба вида кавычек принимаются")
+	_expect((parser.error == null), "Оба вида кавычек принимаются")
 	_expect(commands.size() == 4, "Разобраны четыре команды")
 	if commands.size() == 4:
 		_expect(commands[0].direction == Vector2i.UP, "Направление up")
@@ -37,18 +38,18 @@ func _test_parser() -> void:
 	if commands.size() == 2:
 		_expect(commands[0].line == 2 and commands[1].line == 4, "Номера строк")
 	for source: String in [
-		"move()", "move(up)", "move('north')", "move('UP')", "walk('up')",
+		"move(up)",
 		"move('up'", "move('up\")", "move('up') move('down')",
-		"move('up', 'down')", "move('up');", "move('u\np')", "move(42)",
-		"move('up')\n@", "move('up')\nmove('bad')",
+		"move('up');", "move('u\np')", "move(42)",
+		"move('up')\n@", "move('up')\nmove('bad'",
 	]:
 		commands = parser.parse(source)
-		_expect(not parser.error_message.is_empty(), "Отклонён ввод: " + source)
+		_expect(not (parser.error == null), "Отклонён ввод: " + source)
 		_expect(commands.is_empty(), "При ошибке нет частичной программы")
 	commands = parser.parse("move('left')")
-	_expect(commands.size() == 1 and parser.error_message.is_empty(), "Повторный разбор")
+	_expect(commands.size() == 1 and (parser.error == null), "Повторный разбор")
 	commands = parser.parse(" \n\t\n")
-	_expect(commands.is_empty() and parser.error_message.is_empty(), "Пустая программа")
+	_expect(commands.is_empty() and (parser.error == null), "Пустая программа")
 
 
 func _test_execution() -> void:
@@ -76,14 +77,57 @@ func _test_print_parser() -> void:
 	if commands.size() == 2:
 		_expect(commands[0].text == "Привет", "Строка выводится без кавычек")
 		_expect(commands[1].text.is_empty(), "Допустима пустая строка")
-	for source: String in ["print()", "print(42)", "print('a', 'b')", "print(text)"]:
+	for source: String in ["print(42)", "print(text)"]:
 		commands = parser.parse(source)
-		_expect(commands.is_empty() and not parser.error_message.is_empty(), "Неверный print")
+		_expect(commands.is_empty() and not (parser.error == null), "Неверный print")
 
 
 func _record_step(line: int) -> void:
 	_expect(not _action_running, "Подсветка меняется после завершения действия")
 	_started_lines.append(line)
+
+
+func _test_diagnostics() -> void:
+	var parser := ProgramParser.new()
+	parser.parse("\nmove(\"up\"")
+	_expect(parser.error != null, "Незакрытая скобка — синтаксическая ошибка")
+	if parser.error != null:
+		_expect(
+			DiagnosticFormatter.format_error(parser.error) ==
+			"  File \"main\", line 2\n    move(\"up\"\n        ^\nSyntaxError: '(' was never closed",
+			"Формат SyntaxError с именем main, исходным кодом и указателем"
+		)
+	parser.parse("\r\n\tprint('oops)")
+	_expect(parser.error.line == 2 and parser.error.column == 8, "Позиция кавычки после табуляции")
+	_expect(parser.error.message == "unterminated string literal", "Незакрытая строка")
+	parser.parse("move('up')\n@")
+	_expect(parser.error.line == 2 and parser.error.column == 1, "Позиция неизвестного символа")
+	for sample: Array in [
+		["walk('up')", "NameError", "name 'walk' is not defined"],
+		["move()", "TypeError", "move() takes exactly 1 argument (0 given)"],
+		["print('a', 'b')", "TypeError", "print() takes exactly 1 argument (2 given)"],
+		["move('north')", "ValueError", "invalid direction 'north'"],
+	]:
+		var source: String = "print('before')\nmove('right')\n" + sample[0] + "\nprint('after')"
+		var commands: Array[ProgramCommand] = parser.parse(source)
+		_expect(parser.error == null, "Ошибка выполнения не является синтаксической")
+		var executor := ProgramExecutor.new()
+		var output: Array[String] = []
+		executor.output_emitted.connect(func(message: String) -> void: output.append(message))
+		var move_count: int = _moves.size()
+		var succeeded: bool = await executor.run(commands, _record_move, self)
+		_expect(not succeeded and not executor.is_running, "Ошибка останавливает исполнение")
+		_expect(output == ["before"], "Предыдущий вывод сохранён, последующий не выполняется")
+		_expect(_moves.size() == move_count + 1, "Действие перед ошибкой выполнено")
+		if executor.error != null:
+			var expected: String = "Traceback (most recent call last):\n"
+			expected += "  File \"main\", line 3\n    " + sample[0] + "\n"
+			expected += sample[1] + ": " + sample[2]
+			_expect(DiagnosticFormatter.format_error(executor.error) == expected, "Точный traceback")
+		else:
+			_expect(false, "Должна быть диагностика выполнения")
+		await executor.run(parser.parse("print('fixed')"), _record_move, self)
+		_expect(executor.error == null, "Исправленный запуск очищает диагностику")
 
 
 func _record_move(direction: Vector2i, duration: float) -> void:
@@ -123,7 +167,7 @@ func _test_scene() -> void:
 	_expect(code.get_line_background_color(1).a == 0, "Подсветка снята после программы")
 	_expect(robot.cell == Vector2i(1, -1), "Кнопка запуска перемещает робота")
 	_expect(robot.position.is_equal_approx(Vector3(1, 0, -1)), "Положение в 3D")
-	code.text = "move('up')\nmove('wrong')"
+	code.text = "move('up')\nmove('wrong'"
 	button.pressed.emit()
 	await process_frame
 	_expect(robot.cell == Vector2i(1, -1), "Ошибочная программа не двигает робота")
@@ -174,7 +218,7 @@ func _test_scene() -> void:
 		code.text = invalid_source
 		button.pressed.emit()
 		_expect(output.visible, "Ошибка раскрывает панель вывода")
-		_expect(messages.get_parsed_text().contains("Строка 1:"), "Ошибка содержит строку")
+		_expect(messages.get_parsed_text().contains('File "main", line 1'), "Ошибка содержит строку")
 		_expect(editor.get_node("Margin/Content/Message").text == "", "Ошибка не дублируется под панелью")
 		_expect(not button.disabled, "После ошибки можно запустить исправленный код")
 	code.text = "print('Исправлено')"

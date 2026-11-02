@@ -18,8 +18,8 @@ func _on_run_requested(source: String) -> void:
 		return
 	_editor.clear_output()
 	var commands: Array[ProgramCommand] = _parser.parse(source)
-	if not _parser.error_message.is_empty():
-		_editor.show_error(_parser.error_message)
+	if _parser.error != null:
+		_editor.show_error(DiagnosticFormatter.format_error(_parser.error))
 		return
 	if commands.is_empty():
 		_editor.show_message("Введите команду move или print со строковым аргументом.")
@@ -29,4 +29,7 @@ func _on_run_requested(source: String) -> void:
 	await _executor.run(commands, _robot.move, get_tree())
 	_editor.clear_execution_line()
 	_editor.set_running(false)
-	_editor.show_message("Программа завершена.")
+	if _executor.error != null:
+		_editor.show_error(DiagnosticFormatter.format_error(_executor.error))
+	else:
+		_editor.show_message("Программа завершена.")

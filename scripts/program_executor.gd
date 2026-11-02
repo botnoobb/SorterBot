@@ -7,14 +7,20 @@ signal output_emitted(message: String)
 const STEP_DURATION: float = 0.35
 
 var is_running: bool = false
+var error: ProgramDiagnostic
 
 
 func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree) -> bool:
 	if is_running:
 		return false
+	error = null
 	is_running = true
 	for command: ProgramCommand in commands:
 		step_started.emit(command.line)
+		if command.error != null:
+			error = command.error
+			is_running = false
+			return false
 		# Следующая команда ждёт завершения движения робота.
 		if command.type == ProgramCommand.Type.MOVE:
 			await move_action.call(command.direction, STEP_DURATION)

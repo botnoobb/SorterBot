@@ -1,28 +1,33 @@
 extends RefCounted
 class_name Lexer
 
-var error_message: String = ""
+var error: ProgramDiagnostic
 
 
 func tokenize(source: String) -> Array[Token]:
-	error_message = ""
+	error = null
 	var tokens: Array[Token] = []
 	var text: String = source.replace("\r\n", "\n").replace("\r", "\n")
 	var position: int = 0
 	var line: int = 1
+	var line_start: int = 0
 	while position < text.length():
 		var character: String = text[position]
+		var column: int = position - line_start + 1
 		if character == " " or character == "\t":
 			position += 1
 			continue
 		if character == "\n":
-			tokens.append(Token.new(Token.Type.NEWLINE, character, line))
+			tokens.append(Token.new(Token.Type.NEWLINE, character, line, column))
 			line += 1
+			line_start = position + 1
+		elif character == ",":
+			tokens.append(Token.new(Token.Type.COMMA, character, line, column))
 		elif character == "(" or character == ")":
 			var type: Token.Type = Token.Type.LEFT_PAREN
 			if character == ")":
 				type = Token.Type.RIGHT_PAREN
-			tokens.append(Token.new(type, character, line))
+			tokens.append(Token.new(type, character, line, column))
 		elif character == "\"" or character == "'":
 			var quote: String = character
 			position += 1
@@ -32,20 +37,26 @@ func tokenize(source: String) -> Array[Token]:
 					break
 				position += 1
 			if position == text.length() or text[position] != quote:
-				error_message = "Строка %d: закройте строковый аргумент кавычкой %s." % [line, quote]
+				error = ProgramDiagnostic.new(
+					"SyntaxError", "unterminated string literal", source, line, column
+				)
 				return []
-			tokens.append(Token.new(Token.Type.STRING, text.substr(start, position - start), line))
+			tokens.append(Token.new(
+				Token.Type.STRING, text.substr(start, position - start), line, column
+			))
 		elif _is_letter(character):
 			var start: int = position
 			while position < text.length() and _is_letter(text[position]):
 				position += 1
-			tokens.append(Token.new(Token.Type.IDENTIFIER, text.substr(start, position - start), line))
+			tokens.append(Token.new(
+				Token.Type.IDENTIFIER, text.substr(start, position - start), line, column
+			))
 			continue
 		else:
-			error_message = "Строка %d: неподдерживаемый символ «%s»." % [line, character]
+			error = ProgramDiagnostic.new("SyntaxError", "invalid syntax", source, line, column)
 			return []
 		position += 1
-	tokens.append(Token.new(Token.Type.END, "", line))
+	tokens.append(Token.new(Token.Type.END, "", line, position - line_start + 1))
 	return tokens
 
 

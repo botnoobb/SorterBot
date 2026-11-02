@@ -8,15 +8,15 @@ const DIRECTIONS: Dictionary[String, Vector2i] = {
 	"right": Vector2i.RIGHT,
 }
 
-var error_message: String = ""
+var error: ProgramDiagnostic
 
 
 func parse(source: String) -> Array[ProgramCommand]:
-	error_message = ""
+	error = null
 	var lexer := Lexer.new()
 	var tokens: Array[Token] = lexer.tokenize(source)
-	if not lexer.error_message.is_empty():
-		error_message = lexer.error_message
+	if lexer.error != null:
+		error = lexer.error
 		return []
 	var commands: Array[ProgramCommand] = []
 	var index: int = 0
@@ -24,38 +24,65 @@ func parse(source: String) -> Array[ProgramCommand]:
 		if tokens[index].type == Token.Type.NEWLINE:
 			index += 1
 			continue
-		var line: int = tokens[index].line
-		# В первой версии языка одна команда занимает одну строку.
-		if tokens[index].type != Token.Type.IDENTIFIER or tokens[index].text not in ["move", "print"]:
-			return _fail(line, "ожидается команда move или print со строковым аргументом.")
-		var name: String = tokens[index].text
+		var name: Token = tokens[index]
+		if name.type != Token.Type.IDENTIFIER:
+			return _fail(source, name)
 		index += 1
-		if tokens[index].type != Token.Type.LEFT_PAREN:
-			return _fail(line, "после имени команды ожидается открывающая скобка.")
+		var opening: Token = tokens[index]
+		if opening.type != Token.Type.LEFT_PAREN:
+			return _fail(source, opening)
 		index += 1
-		if tokens[index].type != Token.Type.STRING:
-			return _fail(line, "укажите строковый аргумент в одинарных или двойных кавычках.")
-		var argument: String = tokens[index].text
-		if name == "move" and not DIRECTIONS.has(argument):
-			return _fail(line, "доступные направления: up, down, left, right.")
+		var arguments: Array[String] = []
+		while tokens[index].type != Token.Type.RIGHT_PAREN:
+			if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
+				return _fail(source, opening, "'(' was never closed")
+			if tokens[index].type != Token.Type.STRING:
+				return _fail(source, tokens[index])
+			arguments.append(tokens[index].text)
+			index += 1
+			if tokens[index].type == Token.Type.COMMA:
+				index += 1
+			elif tokens[index].type != Token.Type.RIGHT_PAREN:
+				if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
+					return _fail(source, opening, "'(' was never closed")
+				return _fail(source, tokens[index])
 		index += 1
-		if tokens[index].type != Token.Type.RIGHT_PAREN:
-			return _fail(line, "после аргумента ожидается закрывающая скобка.")
-		index += 1
-		if tokens[index].type != Token.Type.NEWLINE and tokens[index].type != Token.Type.END:
-			return _fail(line, "каждая команда должна находиться на отдельной строке.")
-		var type: ProgramCommand.Type = ProgramCommand.Type.MOVE
-		if name == "print":
-			type = ProgramCommand.Type.PRINT
-		var command := ProgramCommand.new(type, line)
-		if name == "move":
-			command.direction = DIRECTIONS[argument]
-		else:
-			command.text = argument
-		commands.append(command)
+		if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
+			return _fail(source, tokens[index])
+		commands.append(_make_command(source, name, arguments))
 	return commands
 
 
-func _fail(line: int, explanation: String) -> Array[ProgramCommand]:
-	error_message = "Строка %d: %s" % [line, explanation]
+func _make_command(source: String, name: Token, arguments: Array[String]) -> ProgramCommand:
+	var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
+	var error_type: String = ""
+	var message: String = ""
+	if name.text not in ["move", "print"]:
+		error_type = "NameError"
+		message = "name '%s' is not defined" % name.text
+	elif arguments.size() != 1:
+		error_type = "TypeError"
+		message = "%s() takes exactly 1 argument (%d given)" % [name.text, arguments.size()]
+	elif name.text == "move" and not DIRECTIONS.has(arguments[0]):
+		error_type = "ValueError"
+		message = "invalid direction '%s'" % arguments[0]
+	else:
+		if name.text == "move":
+			command.type = ProgramCommand.Type.MOVE
+			command.direction = DIRECTIONS[arguments[0]]
+		else:
+			command.type = ProgramCommand.Type.PRINT
+			command.text = arguments[0]
+		return command
+	# Диагностика сохраняется в команде и возникает только при её выполнении.
+	command.error = ProgramDiagnostic.new(
+		error_type, message, source, name.line, name.column, true
+	)
+	return command
+
+
+func _fail(
+	source: String, token: Token, message: String = "invalid syntax"
+) -> Array[ProgramCommand]:
+	error = ProgramDiagnostic.new("SyntaxError", message, source, token.line, token.column)
 	return []
