@@ -19,7 +19,7 @@ func _on_run_requested(source: String) -> void:
 	_editor.clear_output()
 	var commands: Array[ProgramCommand] = _parser.parse(source)
 	if not _parser.error_message.is_empty():
-		_editor.show_message(_parser.error_message)
+		_editor.show_error(_parser.error_message)
 		return
 	if commands.is_empty():
 		_editor.show_message("Введите команду move или print со строковым аргументом.")

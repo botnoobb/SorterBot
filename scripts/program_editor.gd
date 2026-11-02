@@ -34,6 +34,11 @@ func clear_output() -> void:
 	_output.clear_messages()
 
 
+func show_error(message: String) -> void:
+	_message.text = ""
+	_output.append_error(message)
+
+
 func highlight_execution_line(source_line: int) -> void:
 	clear_execution_line()
 	_execution_line = source_line - 1

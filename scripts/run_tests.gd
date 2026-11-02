@@ -170,6 +170,18 @@ func _test_scene() -> void:
 	code.text = ""
 	button.pressed.emit()
 	_expect(not output.visible, "Пустой запуск также скрывает старый вывод")
+	for invalid_source: String in ["move('north')", "print('незакрытая строка)"]:
+		code.text = invalid_source
+		button.pressed.emit()
+		_expect(output.visible, "Ошибка раскрывает панель вывода")
+		_expect(messages.get_parsed_text().contains("Строка 1:"), "Ошибка содержит строку")
+		_expect(editor.get_node("Margin/Content/Message").text == "", "Ошибка не дублируется под панелью")
+		_expect(not button.disabled, "После ошибки можно запустить исправленный код")
+	code.text = "print('Исправлено')"
+	button.pressed.emit()
+	while button.disabled:
+		await process_frame
+	_expect(messages.get_parsed_text() == "Исправлено\n", "Исправленный запуск очищает ошибку")
 	game.queue_free()
 	await process_frame
 
