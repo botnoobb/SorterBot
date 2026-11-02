@@ -13,6 +13,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_test_parser()
+	_test_print_parser()
 	await _test_execution()
 	await _test_scene()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
@@ -21,7 +22,7 @@ func _run() -> void:
 
 func _test_parser() -> void:
 	var parser := ProgramParser.new()
-	var commands: Array[MoveCommand] = parser.parse(
+	var commands: Array[ProgramCommand] = parser.parse(
 		"move(\"up\")\nmove('down')\nmove(\"left\")\nmove('right')"
 	)
 	_expect(parser.error_message.is_empty(), "Оба вида кавычек принимаются")
@@ -54,18 +55,30 @@ func _test_execution() -> void:
 	var parser := ProgramParser.new()
 	var executor := ProgramExecutor.new()
 	executor.step_started.connect(_record_step)
-	var commands: Array[MoveCommand] = parser.parse("move('up')\n\nmove('right')")
-	executor.run(commands, _record_move)
+	var commands: Array[ProgramCommand] = parser.parse("move('up')\n\nmove('right')")
+	executor.run(commands, _record_move, self)
 	_expect(executor.is_running, "Выполнение началось")
-	var accepted: bool = await executor.run(commands, _record_move)
+	var accepted: bool = await executor.run(commands, _record_move, self)
 	_expect(not accepted, "Повторный запуск во время выполнения отклонён")
 	while executor.is_running:
 		await process_frame
 	_expect(_moves == [Vector2i.UP, Vector2i.RIGHT], "Порядок команд сохранён")
 	_expect(not _action_running, "Последнее действие завершено")
 	_expect(_started_lines == [1, 3], "Шаги используют номера строк исходного кода")
-	accepted = await executor.run([], _record_move)
+	accepted = await executor.run([], _record_move, self)
 	_expect(accepted and not executor.is_running, "Пустая программа завершается")
+
+
+func _test_print_parser() -> void:
+	var parser := ProgramParser.new()
+	var commands: Array[ProgramCommand] = parser.parse("print(\"Привет\")\nprint('')")
+	_expect(commands.size() == 2, "Оба вида кавычек в print")
+	if commands.size() == 2:
+		_expect(commands[0].text == "Привет", "Строка выводится без кавычек")
+		_expect(commands[1].text.is_empty(), "Допустима пустая строка")
+	for source: String in ["print()", "print(42)", "print('a', 'b')", "print(text)"]:
+		commands = parser.parse(source)
+		_expect(commands.is_empty() and not parser.error_message.is_empty(), "Неверный print")
 
 
 func _record_step(line: int) -> void:
@@ -127,6 +140,36 @@ func _test_scene() -> void:
 	while button.disabled:
 		await process_frame
 	_expect(code.get_line_background_color(80).a == 0, "Повторный запуск очищает подсветку")
+	var output: OutputPanel = editor.get_node("Margin/Content/OutputPanel")
+	var messages: RichTextLabel = output.get_node("Messages")
+	_expect(not output.visible, "Без вывода панель скрыта")
+	var previous_cell: Vector2i = robot.cell
+	code.text = "print('[b]Привет[/b]')\nmove('right')\nprint(\"Готово\")"
+	button.pressed.emit()
+	_expect(output.visible, "Первый print раскрывает панель")
+	_expect(messages.get_parsed_text() == "[b]Привет[/b]\n", "Вывод — обычный текст")
+	await create_timer(0.1).timeout
+	_expect(robot.cell == previous_cell, "print не двигает робота")
+	_expect(code.get_line_background_color(0).a > 0, "print занимает отдельный шаг")
+	while button.disabled:
+		await process_frame
+	_expect(messages.get_parsed_text() == "[b]Привет[/b]\nГотово\n", "Порядок вывода")
+	_expect(robot.cell == previous_cell + Vector2i.RIGHT, "Смешанная программа")
+	code.text = "move('left')"
+	_expect(output.visible and not messages.get_parsed_text().is_empty(), "Правка сохраняет вывод")
+	button.pressed.emit()
+	_expect(not output.visible and messages.get_parsed_text().is_empty(), "Новый запуск очищает вывод")
+	while button.disabled:
+		await process_frame
+	for index: int in range(100):
+		editor.append_output("Сообщение %d" % index)
+	await process_frame
+	await process_frame
+	_expect(messages.get_v_scroll_bar().max_value > messages.size.y, "Длинный вывод прокручивается")
+	_expect(messages.selection_enabled, "Вывод можно выделять и копировать")
+	code.text = ""
+	button.pressed.emit()
+	_expect(not output.visible, "Пустой запуск также скрывает старый вывод")
 	game.queue_free()
 	await process_frame
 

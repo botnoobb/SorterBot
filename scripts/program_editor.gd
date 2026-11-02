@@ -10,6 +10,7 @@ var _execution_line: int = -1
 @onready var _code: CodeEdit = $Margin/Content/Code
 @onready var _run_button: Button = $Margin/Content/Run
 @onready var _message: Label = $Margin/Content/Message
+@onready var _output: OutputPanel = $Margin/Content/OutputPanel
 
 
 func _ready() -> void:
@@ -23,6 +24,14 @@ func set_running(running: bool) -> void:
 
 func show_message(message: String) -> void:
 	_message.text = message
+
+
+func append_output(message: String) -> void:
+	_output.append_message(message)
+
+
+func clear_output() -> void:
+	_output.clear_messages()
 
 
 func highlight_execution_line(source_line: int) -> void:
