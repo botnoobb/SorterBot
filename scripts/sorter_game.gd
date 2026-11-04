@@ -11,11 +11,16 @@ func _ready() -> void:
 	_editor.run_requested.connect(_on_run_requested)
 	_editor.stop_requested.connect(_executor.request_stop)
 	_executor.output_emitted.connect(_editor.append_output)
+	_executor.pause_changed.connect(_editor.set_paused)
 	_executor.step_started.connect(_editor.highlight_execution_line)
 
 
 func _on_run_requested(source: String) -> void:
 	if _executor.is_running:
+		if _executor.is_paused:
+			_executor.resume()
+		else:
+			_executor.request_pause()
 		return
 	_editor.clear_output()
 	var commands: Array[ProgramCommand] = _parser.parse(source)

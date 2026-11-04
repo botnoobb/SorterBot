@@ -23,9 +23,17 @@ func _ready() -> void:
 
 
 func set_running(running: bool) -> void:
-	_run_button.disabled = running
+	_run_button.disabled = false
+	_run_button.text = "Ⅱ" if running else "▶"
+	_run_button.tooltip_text = "Пауза после текущей инструкции" if running else "Запустить"
 	_running = running
 	_stop_button.disabled = not running
+
+
+func set_paused(paused: bool) -> void:
+	_run_button.text = "▶" if paused else "Ⅱ"
+	_run_button.tooltip_text = "Продолжить" if paused else "Пауза после текущей инструкции"
+	show_message("Программа на паузе" if paused else "Программа выполняется…")
 
 
 func show_message(message: String) -> void:

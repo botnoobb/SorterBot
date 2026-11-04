@@ -147,13 +147,14 @@ func _test_scene() -> void:
 	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
 	var code: CodeEdit = editor.get_node("Margin/Content/Code")
 	var button: Button = editor.get_node("Margin/Content/Header/Run")
+	var stop: Button = editor.get_node("Margin/Content/Header/Stop")
 	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
 	var title: Label = editor.get_node("Margin/Content/Header/Title")
 	_expect(title.global_position.y >= 0, "Заголовок редактора помещается в окне")
 	_expect(code.gutters_draw_line_numbers, "В редакторе включены номера строк")
 	code.text = "move('up')\nmove(\"right\")"
 	button.pressed.emit()
-	_expect(button.disabled, "Кнопка блокируется на время выполнения")
+	_expect(not button.disabled and button.text == "Ⅱ", "Во время выполнения доступна пауза")
 	_expect(code.get_line_background_color(0).a > 0, "Первая строка подсвечена")
 	await create_timer(0.1).timeout
 	_expect(robot.cell == Vector2i.ZERO, "Шаг не заканчивается раньше анимации")
@@ -162,7 +163,7 @@ func _test_scene() -> void:
 		await process_frame
 	_expect(code.get_line_background_color(0).a == 0, "Подсветка первой строки снята")
 	_expect(code.get_line_background_color(1).a > 0, "Вторая строка подсвечена")
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(code.get_line_background_color(1).a == 0, "Подсветка снята после программы")
 	_expect(robot.cell == Vector2i(1, -1), "Кнопка запуска перемещает робота")
@@ -173,7 +174,7 @@ func _test_scene() -> void:
 	_expect(robot.cell == Vector2i(1, -1), "Ошибочная программа не двигает робота")
 	code.text = "move('left')"
 	button.pressed.emit()
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(robot.cell == Vector2i(0, -1), "Повторный запуск сохраняет положение")
 	code.text = "\n".repeat(80) + "move('up')"
@@ -181,7 +182,7 @@ func _test_scene() -> void:
 	await process_frame
 	_expect(code.get_line_background_color(80).a > 0, "Подсветка после пустых строк")
 	_expect(code.get_first_visible_line() > 0, "Редактор прокручивается к выполняемой строке")
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(code.get_line_background_color(80).a == 0, "Повторный запуск очищает подсветку")
 	var output: OutputPanel = editor.get_node("Margin/Content/OutputPanel")
@@ -195,7 +196,7 @@ func _test_scene() -> void:
 	await create_timer(0.1).timeout
 	_expect(robot.cell == previous_cell, "print не двигает робота")
 	_expect(code.get_line_background_color(0).a > 0, "print занимает отдельный шаг")
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(messages.get_parsed_text() == "[b]Привет[/b]\nГотово\n", "Порядок вывода")
 	_expect(robot.cell == previous_cell + Vector2i.RIGHT, "Смешанная программа")
@@ -203,7 +204,7 @@ func _test_scene() -> void:
 	_expect(output.visible and not messages.get_parsed_text().is_empty(), "Правка сохраняет вывод")
 	button.pressed.emit()
 	_expect(not output.visible and messages.get_parsed_text().is_empty(), "Новый запуск очищает вывод")
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	for index: int in range(100):
 		editor.append_output("Сообщение %d" % index)
@@ -223,17 +224,16 @@ func _test_scene() -> void:
 		_expect(not button.disabled, "После ошибки можно запустить исправленный код")
 	code.text = "print('Исправлено')"
 	button.pressed.emit()
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(messages.get_parsed_text() == "Исправлено\n", "Исправленный запуск очищает ошибку")
-	var stop: Button = editor.get_node("Margin/Content/Header/Stop")
 	code.text = "move('up')\nmove('right')"
 	previous_cell = robot.cell
 	button.pressed.emit()
 	await create_timer(0.1).timeout
 	stop.pressed.emit()
-	_expect(button.disabled and code.editable, "Остановка ждёт анимацию, ввод доступен")
-	while button.disabled:
+	_expect(not stop.disabled and code.editable, "Остановка ждёт анимацию, ввод доступен")
+	while not stop.disabled:
 		await process_frame
 	_expect(robot.cell == previous_cell + Vector2i.UP, "Остановка завершает только текущую инструкцию")
 	_expect(stop.disabled, "После остановки квадрат недоступен")
@@ -244,15 +244,56 @@ func _test_scene() -> void:
 	code.insert_text_at_caret(" ")
 	await process_frame
 	_expect(code.text.begins_with(" "), "Первая правка применяется")
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(robot.cell == previous_cell + Vector2i.UP * 2, "Правка останавливает новый запуск после первой инструкции")
 	code.text = "print('Сохранить')\nprint('Не выполнять')"
 	button.pressed.emit()
 	stop.pressed.emit()
-	while button.disabled:
+	while not stop.disabled:
 		await process_frame
 	_expect(messages.get_parsed_text() == "Сохранить\n", "Остановка сохраняет вывод текущей инструкции")
+	code.text = "move('up')\nprint('После паузы')"
+	previous_cell = robot.cell
+	button.pressed.emit()
+	await create_timer(0.1).timeout
+	button.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(robot.cell == previous_cell + Vector2i.UP, "Пауза дожидается движения")
+	_expect(button.text == "▶" and not stop.disabled, "В паузе доступны продолжение и остановка")
+	_expect(messages.get_parsed_text().is_empty(), "Следующая инструкция ждёт продолжения")
+	_expect(code.get_line_background_color(0).a > 0, "В паузе сохраняется подсветка")
+	button.pressed.emit()
+	while not stop.disabled:
+		await process_frame
+	_expect(messages.get_parsed_text() == "После паузы\n", "Продолжение выполняет следующую инструкцию")
+	code.text = "print('Последняя')"
+	button.pressed.emit()
+	button.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(stop.disabled, "Пауза на последней инструкции завершает запуск")
+	code.text = "print('Первый')\nprint('Второй')"
+	button.pressed.emit()
+	button.pressed.emit()
+	await create_timer(0.4).timeout
+	stop.pressed.emit()
+	await process_frame
+	await process_frame
+	_expect(stop.disabled and messages.get_parsed_text() == "Первый\n", "Остановка из паузы сохраняет вывод без дополнительной инструкции")
+	button.pressed.emit()
+	button.pressed.emit()
+	await create_timer(0.4).timeout
+	code.set_caret_line(1)
+	code.select(0, 0, 0, 5)
+	await process_frame
+	_expect(not stop.disabled and button.text == "▶", "Курсор и выделение сохраняют паузу")
+	code.deselect()
+	code.set_caret_column(0)
+	code.insert_text_at_caret(" ")
+	await process_frame
+	await process_frame
+	_expect(stop.disabled, "Правка в паузе завершает запуск")
+	_expect(messages.get_parsed_text() == "Первый\n", "Правка в паузе сохраняет вывод")
 	game.queue_free()
 	await process_frame
 
