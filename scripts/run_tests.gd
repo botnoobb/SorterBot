@@ -146,9 +146,9 @@ func _test_scene() -> void:
 	await process_frame
 	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
 	var code: CodeEdit = editor.get_node("Margin/Content/Code")
-	var button: Button = editor.get_node("Margin/Content/Run")
+	var button: Button = editor.get_node("Margin/Content/Header/Run")
 	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
-	var title: Label = editor.get_node("Margin/Content/Title")
+	var title: Label = editor.get_node("Margin/Content/Header/Title")
 	_expect(title.global_position.y >= 0, "Заголовок редактора помещается в окне")
 	_expect(code.gutters_draw_line_numbers, "В редакторе включены номера строк")
 	code.text = "move('up')\nmove(\"right\")"
@@ -226,6 +226,33 @@ func _test_scene() -> void:
 	while button.disabled:
 		await process_frame
 	_expect(messages.get_parsed_text() == "Исправлено\n", "Исправленный запуск очищает ошибку")
+	var stop: Button = editor.get_node("Margin/Content/Header/Stop")
+	code.text = "move('up')\nmove('right')"
+	previous_cell = robot.cell
+	button.pressed.emit()
+	await create_timer(0.1).timeout
+	stop.pressed.emit()
+	_expect(button.disabled and code.editable, "Остановка ждёт анимацию, ввод доступен")
+	while button.disabled:
+		await process_frame
+	_expect(robot.cell == previous_cell + Vector2i.UP, "Остановка завершает только текущую инструкцию")
+	_expect(stop.disabled, "После остановки квадрат недоступен")
+	button.pressed.emit()
+	await create_timer(0.1).timeout
+	code.set_caret_line(0)
+	code.set_caret_column(0)
+	code.insert_text_at_caret(" ")
+	await process_frame
+	_expect(code.text.begins_with(" "), "Первая правка применяется")
+	while button.disabled:
+		await process_frame
+	_expect(robot.cell == previous_cell + Vector2i.UP * 2, "Правка останавливает новый запуск после первой инструкции")
+	code.text = "print('Сохранить')\nprint('Не выполнять')"
+	button.pressed.emit()
+	stop.pressed.emit()
+	while button.disabled:
+		await process_frame
+	_expect(messages.get_parsed_text() == "Сохранить\n", "Остановка сохраняет вывод текущей инструкции")
 	game.queue_free()
 	await process_frame
 

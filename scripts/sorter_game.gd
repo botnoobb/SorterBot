@@ -9,6 +9,7 @@ var _executor := ProgramExecutor.new()
 
 func _ready() -> void:
 	_editor.run_requested.connect(_on_run_requested)
+	_editor.stop_requested.connect(_executor.request_stop)
 	_executor.output_emitted.connect(_editor.append_output)
 	_executor.step_started.connect(_editor.highlight_execution_line)
 
@@ -31,5 +32,7 @@ func _on_run_requested(source: String) -> void:
 	_editor.set_running(false)
 	if _executor.error != null:
 		_editor.show_error(DiagnosticFormatter.format_error(_executor.error))
+	elif _executor.was_stopped:
+		_editor.show_message("Программа остановлена.")
 	else:
 		_editor.show_message("Программа завершена.")
