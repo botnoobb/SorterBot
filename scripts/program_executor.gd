@@ -15,13 +15,13 @@ var _stop_requested: bool = false
 var error: ProgramDiagnostic
 
 
-func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree) -> bool:
+func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree, single_step: bool = false) -> bool:
 	if is_running:
 		return false
 	error = null
 	was_stopped = false
 	_stop_requested = false
-	_pause_requested = false
+	_pause_requested = single_step
 	is_paused = false
 	is_running = true
 	for index: int in range(commands.size()):
@@ -42,8 +42,9 @@ func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree
 			pause_changed.emit(true)
 			while is_paused and not _stop_requested:
 				await tree.process_frame
-			is_paused = false
-			pause_changed.emit(false)
+			if is_paused:
+				is_paused = false
+				pause_changed.emit(false)
 		if _stop_requested:
 			was_stopped = true
 			is_running = false
@@ -62,7 +63,8 @@ func request_pause() -> void:
 		_pause_requested = true
 
 
-func resume() -> void:
+func resume(single_step: bool = false) -> void:
 	if is_paused:
-		_pause_requested = false
+		_pause_requested = single_step
 		is_paused = false
+		pause_changed.emit(false)

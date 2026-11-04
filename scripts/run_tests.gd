@@ -294,6 +294,54 @@ func _test_scene() -> void:
 	await process_frame
 	_expect(stop.disabled, "Правка в паузе завершает запуск")
 	_expect(messages.get_parsed_text() == "Первый\n", "Правка в паузе сохраняет вывод")
+	code.text = "print('Один')\nprint('Два')\nprint('Три')"
+	code.set_caret_line(2)
+	code.set_caret_column(3)
+	button.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(code.get_caret_line() == 2 and code.get_caret_column() == 3, "Смена инструкции не перемещает курсор")
+	code.insert_text_at_caret(" ")
+	await process_frame
+	_expect(code.get_line(2) == "pri nt('Три')", "Правка применяется в выбранной строке")
+	while not stop.disabled:
+		await process_frame
+	_expect(messages.get_parsed_text() == "Один\nДва\n", "Правка завершает текущую инструкцию и останавливает запуск")
+	var step: Button = editor.get_node("Margin/Content/Header/Step")
+	code.text = "print('Шаг 1')\nmove('up')\nprint('Шаг 3')"
+	previous_cell = robot.cell
+	step.pressed.emit()
+	_expect(step.disabled and messages.get_parsed_text() == "Шаг 1\n", "Новый шаг очищает прежний вывод и блокирует кнопку")
+	await create_timer(0.4).timeout
+	_expect(not step.disabled and not stop.disabled and button.text == "▶", "После шага наступает пауза")
+	await create_timer(0.4).timeout
+	_expect(robot.cell == previous_cell, "В ожидании шага инструкция не начинается")
+	step.pressed.emit()
+	_expect(step.disabled, "Продолжение сразу блокирует повторный шаг")
+	await create_timer(0.1).timeout
+	_expect(robot.cell == previous_cell, "Шаг ждёт анимацию")
+	await create_timer(0.3).timeout
+	_expect(robot.cell == previous_cell + Vector2i.UP and not step.disabled, "Шаг заканчивает движение перед паузой")
+	_expect(messages.get_parsed_text() == "Шаг 1\n", "Шаг из паузы сохраняет вывод")
+	step.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(stop.disabled and not step.disabled, "Последний шаг завершает программу")
+	_expect(messages.get_parsed_text() == "Шаг 1\nШаг 3\n", "Шаги не повторяют инструкции")
+	code.text = "move('up')\nprint('Не выполнять')"
+	previous_cell = robot.cell
+	step.pressed.emit()
+	await create_timer(0.1).timeout
+	stop.pressed.emit()
+	_expect(not stop.disabled, "Остановка шага ждёт действие")
+	await create_timer(0.3).timeout
+	_expect(stop.disabled and robot.cell == previous_cell + Vector2i.UP, "Остановка шага завершает только начатое действие")
+	step.pressed.emit()
+	await create_timer(0.4).timeout
+	code.set_caret_line(1)
+	code.set_caret_column(0)
+	code.insert_text_at_caret(" ")
+	await process_frame
+	await process_frame
+	_expect(stop.disabled and code.get_line(1).begins_with(" "), "Правка в ожидании шага применяется и останавливает запуск")
 	game.queue_free()
 	await process_frame
 
