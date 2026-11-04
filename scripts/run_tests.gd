@@ -342,6 +342,35 @@ func _test_scene() -> void:
 	await process_frame
 	await process_frame
 	_expect(stop.disabled and code.get_line(1).begins_with(" "), "Правка в ожидании шага применяется и останавливает запуск")
+	code.text = "print('A')\nmove('up')\nprint('B')\nmove('right')\nprint('C')\nmove('down')"
+	previous_cell = robot.cell
+	button.pressed.emit()
+	await create_timer(0.45).timeout
+	button.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(robot.cell == previous_cell + Vector2i.UP and not step.disabled, "Автоматический режим переходит в паузу после движения")
+	_expect(messages.get_parsed_text() == "A\n", "Пауза сохраняет накопленный вывод")
+	step.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(messages.get_parsed_text() == "A\nB\n", "Шаг после автоматического режима продолжает тот же запуск")
+	step.pressed.emit()
+	await create_timer(0.4).timeout
+	_expect(robot.cell == previous_cell + Vector2i.UP + Vector2i.RIGHT, "Второй шаг не повторяет предыдущие движения")
+	button.pressed.emit()
+	while not stop.disabled:
+		await process_frame
+	_expect(messages.get_parsed_text() == "A\nB\nC\n", "Автоматическое продолжение сохраняет все сообщения ровно один раз")
+	_expect(robot.cell == previous_cell + Vector2i.RIGHT, "Переключение режимов не пропускает движения")
+	step.pressed.emit()
+	await create_timer(0.4).timeout
+	stop.pressed.emit()
+	await process_frame
+	await process_frame
+	button.pressed.emit()
+	_expect(messages.get_parsed_text() == "A\n", "После остановки автоматический запуск начинается сначала")
+	stop.pressed.emit()
+	while not stop.disabled:
+		await process_frame
 	game.queue_free()
 	await process_frame
 
