@@ -22,12 +22,19 @@ func clear_messages() -> void:
 
 func append_error(message: String, line: int = 0, column: int = 0) -> void:
 	show()
-	if line > 0:
-		_messages.push_meta(Vector2i(line, column))
-		_messages.add_text("Строка %d, позиция %d\n" % [line, column])
-		_messages.pop()
 	_messages.push_color(Color(1.0, 0.48, 0.43))
-	_messages.add_text(message + "\n")
+	var location: String = '  File "main", line %d\n' % line
+	var location_start: int = message.find(location) if line > 0 else -1
+	if location_start >= 0:
+		var link_start: int = location_start + '  File "main", '.length()
+		var link_text: String = "line %d" % line
+		_messages.add_text(message.left(link_start))
+		_messages.push_meta(Vector2i(line, column))
+		_messages.add_text(link_text)
+		_messages.pop()
+		_messages.add_text(message.substr(link_start + link_text.length()) + "\n")
+	else:
+		_messages.add_text(message + "\n")
 	_messages.pop()
 
 

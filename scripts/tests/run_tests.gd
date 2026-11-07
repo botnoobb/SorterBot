@@ -414,6 +414,8 @@ func _test_scene() -> void:
 	_expect(code.get_line_background_color(0).a == 0, "После нового запуска фон ошибки снят")
 	code.text = "\nmove("
 	button.pressed.emit()
+	_expect(messages.get_parsed_text().begins_with('  File "main", line 2\n'), "Ссылка не добавляет строки к формату Python")
+	_expect(not messages.get_parsed_text().contains("Строка "), "Нет дополнительного заголовка навигации")
 	messages.meta_clicked.emit(Vector2i(2, 5))
 	_expect(code.get_caret_line() == 1 and code.get_caret_column() == 4, "Переход учитывает позицию синтаксической ошибки")
 	game.queue_free()
