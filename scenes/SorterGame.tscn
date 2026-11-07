@@ -1,8 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Robot.tscn" id="3"]
+
+[ext_resource type="Script" path="res://scripts/sorter_field.gd" id="4"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1
@@ -40,6 +42,14 @@ size = Vector2i(640, 600)
 render_target_update_mode = 4
 
 [node name="World" type="Node3D" parent="Layout/Field/Viewport"]
+script = ExtResource("4")
+
+[node name="Camera" type="Camera3D" parent="Layout/Field/Viewport/World"]
+position = Vector3(2, 12, 11)
+rotation_degrees = Vector3(-53.1301, 0, 0)
+projection = 1
+size = 8.0
+current = true
 
 [node name="Environment" type="WorldEnvironment" parent="Layout/Field/Viewport/World"]
 environment = SubResource("Environment")
@@ -52,3 +62,9 @@ light_energy = 1.2
 
 [node name="ProgramEditor" parent="Layout" instance=ExtResource("2")]
 layout_mode = 2
+
+[node name="Goal" type="Label" parent="."]
+offset_left = 16.0
+offset_top = 16.0
+text = "Доставьте коробку в отмеченную зону"
+mouse_filter = 2

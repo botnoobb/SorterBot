@@ -57,8 +57,7 @@ custom_minimum_size = Vector2(0, 180)
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_font_sizes/font_size = 18
-text = "move(\"up\")
-move('right')"
+text = ""
 gutters_draw_line_numbers = true
 
 [node name="OutputPanel" parent="Margin/Content" instance=ExtResource("2")]

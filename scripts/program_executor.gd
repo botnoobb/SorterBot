@@ -13,12 +13,14 @@ var _pause_requested: bool = false
 var was_stopped: bool = false
 var _stop_requested: bool = false
 var error: ProgramDiagnostic
+var action_error: String = ""
 
 
-func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree, single_step: bool = false) -> bool:
+func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree, single_step: bool = false, game_action: Callable = Callable()) -> bool:
 	if is_running:
 		return false
 	error = null
+	action_error = ""
 	was_stopped = false
 	_stop_requested = false
 	_pause_requested = single_step
@@ -32,7 +34,12 @@ func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree
 			is_running = false
 			return false
 		# Следующая команда ждёт завершения движения робота.
-		if command.type == ProgramCommand.Type.MOVE:
+		if command.type != ProgramCommand.Type.PRINT and game_action.is_valid():
+			action_error = await game_action.call(command, STEP_DURATION)
+			if not action_error.is_empty():
+				is_running = false
+				return false
+		elif command.type == ProgramCommand.Type.MOVE:
 			await move_action.call(command.direction, STEP_DURATION)
 		else:
 			output_emitted.emit(command.text)

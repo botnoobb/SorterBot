@@ -1,7 +1,7 @@
 extends RefCounted
 class_name ProgramCommand
 
-enum Type { MOVE, PRINT, INVALID }
+enum Type { MOVE, PRINT, GRAB, PUT, INVALID }
 
 var type: Type
 var line: int

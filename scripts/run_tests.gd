@@ -17,6 +17,7 @@ func _run() -> void:
 	await _test_execution()
 	await _test_diagnostics()
 	await _test_scene()
+	await _test_delivery()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -157,26 +158,26 @@ func _test_scene() -> void:
 	_expect(not button.disabled and button.text == "Ⅱ", "Во время выполнения доступна пауза")
 	_expect(code.get_line_background_color(0).a > 0, "Первая строка подсвечена")
 	await create_timer(0.1).timeout
-	_expect(robot.cell == Vector2i.ZERO, "Шаг не заканчивается раньше анимации")
-	_expect(robot.position.z < 0 and robot.position.z > -1, "Движение идёт внутри шага")
-	while robot.cell == Vector2i.ZERO:
+	_expect(robot.cell == Vector2i(1, 3), "Шаг не заканчивается раньше анимации")
+	_expect(robot.position.z < 3 and robot.position.z > 2, "Движение идёт внутри шага")
+	while robot.cell == Vector2i(1, 3):
 		await process_frame
 	_expect(code.get_line_background_color(0).a == 0, "Подсветка первой строки снята")
 	_expect(code.get_line_background_color(1).a > 0, "Вторая строка подсвечена")
 	while not stop.disabled:
 		await process_frame
 	_expect(code.get_line_background_color(1).a == 0, "Подсветка снята после программы")
-	_expect(robot.cell == Vector2i(1, -1), "Кнопка запуска перемещает робота")
-	_expect(robot.position.is_equal_approx(Vector3(1, 0, -1)), "Положение в 3D")
+	_expect(robot.cell == Vector2i(2, 2), "Кнопка запуска перемещает робота")
+	_expect(robot.position.is_equal_approx(Vector3(2, 0, 2)), "Положение в 3D")
 	code.text = "move('up')\nmove('wrong'"
 	button.pressed.emit()
 	await process_frame
-	_expect(robot.cell == Vector2i(1, -1), "Ошибочная программа не двигает робота")
+	_expect(robot.cell == Vector2i(2, 2), "Ошибочная программа не двигает робота")
 	code.text = "move('left')"
 	button.pressed.emit()
 	while not stop.disabled:
 		await process_frame
-	_expect(robot.cell == Vector2i(0, -1), "Повторный запуск сохраняет положение")
+	_expect(robot.cell == Vector2i(1, 2), "Повторный запуск сохраняет положение")
 	code.text = "\n".repeat(80) + "move('up')"
 	button.pressed.emit()
 	await process_frame
@@ -228,6 +229,8 @@ func _test_scene() -> void:
 		await process_frame
 	_expect(messages.get_parsed_text() == "Исправлено\n", "Исправленный запуск очищает ошибку")
 	code.text = "move('up')\nmove('right')"
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
 	previous_cell = robot.cell
 	button.pressed.emit()
 	await create_timer(0.1).timeout
@@ -254,6 +257,8 @@ func _test_scene() -> void:
 		await process_frame
 	_expect(messages.get_parsed_text() == "Сохранить\n", "Остановка сохраняет вывод текущей инструкции")
 	code.text = "move('up')\nprint('После паузы')"
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
 	previous_cell = robot.cell
 	button.pressed.emit()
 	await create_timer(0.1).timeout
@@ -308,6 +313,8 @@ func _test_scene() -> void:
 	_expect(messages.get_parsed_text() == "Один\nДва\n", "Правка завершает текущую инструкцию и останавливает запуск")
 	var step: Button = editor.get_node("Margin/Content/Header/Step")
 	code.text = "print('Шаг 1')\nmove('up')\nprint('Шаг 3')"
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
 	previous_cell = robot.cell
 	step.pressed.emit()
 	_expect(step.disabled and messages.get_parsed_text() == "Шаг 1\n", "Новый шаг очищает прежний вывод и блокирует кнопку")
@@ -327,6 +334,8 @@ func _test_scene() -> void:
 	_expect(stop.disabled and not step.disabled, "Последний шаг завершает программу")
 	_expect(messages.get_parsed_text() == "Шаг 1\nШаг 3\n", "Шаги не повторяют инструкции")
 	code.text = "move('up')\nprint('Не выполнять')"
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
 	previous_cell = robot.cell
 	step.pressed.emit()
 	await create_timer(0.1).timeout
@@ -343,6 +352,8 @@ func _test_scene() -> void:
 	await process_frame
 	_expect(stop.disabled and code.get_line(1).begins_with(" "), "Правка в ожидании шага применяется и останавливает запуск")
 	code.text = "print('A')\nmove('up')\nprint('B')\nmove('right')\nprint('C')\nmove('down')"
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
 	previous_cell = robot.cell
 	button.pressed.emit()
 	await create_timer(0.45).timeout
@@ -371,6 +382,19 @@ func _test_scene() -> void:
 	stop.pressed.emit()
 	while not stop.disabled:
 		await process_frame
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
+	code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nput()\nprint('Готово')"
+	button.pressed.emit()
+	while not stop.disabled:
+		await process_frame
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	_expect(field.delivered and not field.carrying, "Доставка засчитана после put")
+	_expect(game.get_node("Goal").text == "Коробка доставлена", "Успех виден игроку")
+	_expect(messages.get_parsed_text() == "Готово\n", "После доставки программа продолжается")
+	code.text = "grab()"
+	button.pressed.emit()
+	_expect(messages.get_parsed_text().contains("нет коробки"), "Доставленную коробку нельзя взять снова")
 	game.queue_free()
 	await process_frame
 
@@ -380,3 +404,37 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_failures += 1
 		push_error(message)
+
+
+func _test_delivery() -> void:
+	var game: Control = load("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	var parser := ProgramParser.new()
+	var executor := ProgramExecutor.new()
+	for source: String in ["grab()", "put()"]:
+		await executor.run(parser.parse(source), robot.move, self, false, field.perform)
+		_expect(not executor.action_error.is_empty(), "Неверное действие отклонено: " + source)
+	await executor.run(parser.parse("move('up')\ngrab()\nput()"), robot.move, self, false, field.perform)
+	_expect(field.carrying and not field.delivered, "Отказ положить вне зоны сохраняет коробку у робота")
+	await executor.run(parser.parse("grab()"), robot.move, self, false, field.perform)
+	_expect(field.carrying and not executor.action_error.is_empty(), "Повторный захват отклонён")
+	await executor.run(parser.parse("move('left')\nmove('left')"), robot.move, self, false, field.perform)
+	_expect(robot.cell == Vector2i(0, 2) and field.carrying, "Граница сохраняет позицию и груз")
+	var commands: Array[ProgramCommand] = parser.parse("move('right')\nmove('right')\nmove('right')\nput()")
+	executor.run(commands, robot.move, self, true, field.perform)
+	for index: int in range(3):
+		while executor.is_running and not executor.is_paused:
+			await process_frame
+		_expect(executor.is_paused and not field.delivered, "Переноска по шагам не засчитывает доставку")
+		executor.resume(true)
+	await create_timer(0.1).timeout
+	_expect(not field.delivered, "Успех ждёт завершения put")
+	executor.request_stop()
+	while executor.is_running:
+		await process_frame
+	_expect(field.delivered and not field.carrying, "Остановка дожидается завершения put и доставки")
+	game.queue_free()
+	await process_frame

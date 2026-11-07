@@ -57,12 +57,12 @@ func _make_command(source: String, name: Token, arguments: Array[String]) -> Pro
 	var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
 	var error_type: String = ""
 	var message: String = ""
-	if name.text not in ["move", "print"]:
+	if name.text not in ["move", "print", "grab", "put"]:
 		error_type = "NameError"
 		message = "name '%s' is not defined" % name.text
-	elif arguments.size() != 1:
+	elif arguments.size() != (0 if name.text in ["grab", "put"] else 1):
 		error_type = "TypeError"
-		message = "%s() takes exactly 1 argument (%d given)" % [name.text, arguments.size()]
+		message = "%s() takes exactly %d argument (%d given)" % [name.text, 0 if name.text in ["grab", "put"] else 1, arguments.size()]
 	elif name.text == "move" and not DIRECTIONS.has(arguments[0]):
 		error_type = "ValueError"
 		message = "invalid direction '%s'" % arguments[0]
@@ -70,6 +70,10 @@ func _make_command(source: String, name: Token, arguments: Array[String]) -> Pro
 		if name.text == "move":
 			command.type = ProgramCommand.Type.MOVE
 			command.direction = DIRECTIONS[arguments[0]]
+		elif name.text == "grab":
+			command.type = ProgramCommand.Type.GRAB
+		elif name.text == "put":
+			command.type = ProgramCommand.Type.PUT
 		else:
 			command.type = ProgramCommand.Type.PRINT
 			command.text = arguments[0]
