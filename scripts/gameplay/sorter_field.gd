@@ -8,6 +8,7 @@ const ZONE_CELL := Vector2i(3, 2)
 
 var carrying: bool = false
 var delivered: bool = false
+var delivery_failed: bool = false
 var _cargo: MeshInstance3D
 
 @onready var _robot: SorterRobot = $Robot
@@ -32,6 +33,7 @@ func _ready() -> void:
 
 
 func perform(command: ProgramCommand, duration: float) -> String:
+	delivery_failed = false
 	if command.type == ProgramCommand.Type.MOVE:
 		var target: Vector2i = _robot.cell + command.direction
 		if target.x < 0 or target.y < 0 or target.x >= 5 or target.y >= 5:
@@ -47,7 +49,8 @@ func perform(command: ProgramCommand, duration: float) -> String:
 		if not carrying:
 			return "У робота нет коробки."
 		if _robot.cell != ZONE_CELL:
-			return "Положить коробку можно только в зоне доставки."
+			delivery_failed = true
+			return "коробку нужно положить в зоне доставки."
 	else:
 		return "Неизвестное игровое действие."
 	var grabbing: bool = command.type == ProgramCommand.Type.GRAB

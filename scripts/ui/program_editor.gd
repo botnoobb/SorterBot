@@ -75,6 +75,11 @@ func highlight_execution_line(source_line: int) -> void:
 	_code.set_line_as_center_visible(_execution_line)
 
 
+func show_delivery_error(message: String) -> void:
+	_message.text = ""
+	_output.append_delivery_error(message)
+
+
 func clear_execution_line() -> void:
 	if _execution_line >= 0 and _execution_line < _code.get_line_count():
 		_code.set_line_background_color(_execution_line, Color(0, 0, 0, 0))

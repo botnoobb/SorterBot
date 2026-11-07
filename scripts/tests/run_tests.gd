@@ -18,6 +18,7 @@ func _run() -> void:
 	await _test_diagnostics()
 	await _test_scene()
 	await _test_delivery()
+	await _test_wrong_delivery()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -461,3 +462,62 @@ func _test_delivery() -> void:
 	_expect(field.delivered and not field.carrying, "Остановка дожидается завершения put и доставки")
 	game.queue_free()
 	await process_frame
+
+
+func _test_wrong_delivery() -> void:
+	for single_step: bool in [false, true]:
+		var game: Control = load("res://scenes/SorterGame.tscn").instantiate()
+		root.add_child(game)
+		await process_frame
+		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+		var robot: SorterRobot = field.get_node("Robot")
+		var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+		var code: CodeEdit = editor.get_node("Margin/Content/Code")
+		var run: Button = editor.get_node("Margin/Content/Header/Run")
+		var step: Button = editor.get_node("Margin/Content/Header/Step")
+		var output: OutputPanel = editor.get_node("Margin/Content/OutputPanel")
+		var messages: RichTextLabel = output.get_node("Messages")
+		var executor: ProgramExecutor = game.get("_executor")
+		code.text = "move('up')\ngrab()\nput()\nprint('После отказа')\nmove('right')"
+		_expect(not output.visible, "Перед ошибкой доставки панель скрыта")
+		if single_step:
+			step.pressed.emit()
+			for index: int in range(2):
+				while executor.is_running and not executor.is_paused:
+					await process_frame
+				_expect(executor.is_paused, "До ошибки доставки шаг ожидает нажатия")
+				step.pressed.emit()
+		else:
+			run.pressed.emit()
+		while executor.is_running:
+			await process_frame
+		_expect(not executor.is_paused, "Ошибка доставки завершает запуск без ожидания шага")
+		_expect(output.visible, "Ошибка доставки раскрывает скрытую панель")
+		_expect(messages.get_parsed_text() == "Ошибка доставки: коробку нужно положить в зоне доставки.\n", "Отдельное сообщение ошибки доставки без последующего вывода")
+		_expect(field.carrying and not field.delivered, "Отказ сохраняет коробку у робота без зачёта")
+		_expect(robot.cell == SorterField.CARGO_CELL, "После отказа следующие перемещения не выполняются")
+		_expect(game.get_node("Goal").text != "Коробка доставлена", "После отказа нет сообщения об успехе")
+		executor.resume(true)
+		await process_frame
+		_expect(not executor.is_running and robot.cell == SorterField.CARGO_CELL, "Ошибочный запуск нельзя продолжить")
+		# Кнопка «Шаг» после отказа начинает программу с первой инструкции.
+		step.pressed.emit()
+		while executor.is_running and not executor.is_paused:
+			await process_frame
+		_expect(robot.cell == SorterField.CARGO_CELL + Vector2i.UP, "Шаг после отказа начинает новый запуск")
+		executor.request_stop()
+		while executor.is_running:
+			await process_frame
+		code.text = "grab()"
+		run.pressed.emit()
+		while executor.is_running:
+			await process_frame
+		_expect(not messages.get_parsed_text().contains("Ошибка доставки:"), "Другой отказ не наследует вид ошибки доставки")
+		code.text = "move('down')\nmove('right')\nmove('right')\nput()"
+		run.pressed.emit()
+		while executor.is_running:
+			await process_frame
+		_expect(field.delivered and not field.carrying, "Сохранённую коробку можно доставить исправленной программой")
+		_expect(not output.visible, "Успешный новый запуск очищает ошибку доставки")
+		game.queue_free()
+		await process_frame

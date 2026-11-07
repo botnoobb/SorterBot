@@ -38,6 +38,13 @@ func append_error(message: String, line: int = 0, column: int = 0) -> void:
 	_messages.pop()
 
 
+func append_delivery_error(message: String) -> void:
+	show()
+	_messages.push_color(Color(1.0, 0.7, 0.3))
+	_messages.add_text("Ошибка доставки: " + message + "\n")
+	_messages.pop()
+
+
 func _on_meta_clicked(meta: Variant) -> void:
 	if meta is Vector2i:
 		error_location_clicked.emit(meta.x, meta.y)
