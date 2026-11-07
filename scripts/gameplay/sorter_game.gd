@@ -41,7 +41,7 @@ func _start_program(source: String, single_step: bool = false) -> void:
 	_editor.clear_output()
 	var commands: Array[ProgramCommand] = _parser.parse(source)
 	if _parser.error != null:
-		_editor.show_error(DiagnosticFormatter.format_error(_parser.error))
+		_editor.show_error(DiagnosticFormatter.format_error(_parser.error), _parser.error.line, _parser.error.column)
 		return
 	if commands.is_empty():
 		_editor.show_message("Введите команду move или print со строковым аргументом.")
@@ -54,7 +54,7 @@ func _start_program(source: String, single_step: bool = false) -> void:
 	if not _executor.action_error.is_empty():
 		_editor.show_error(_executor.action_error)
 	elif _executor.error != null:
-		_editor.show_error(DiagnosticFormatter.format_error(_executor.error))
+		_editor.show_error(DiagnosticFormatter.format_error(_executor.error), _executor.error.line, _executor.error.column)
 	elif _executor.was_stopped:
 		_editor.show_message("Программа остановлена.")
 	else:

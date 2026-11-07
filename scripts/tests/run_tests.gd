@@ -395,6 +395,27 @@ func _test_scene() -> void:
 	code.text = "grab()"
 	button.pressed.emit()
 	_expect(messages.get_parsed_text().contains("нет коробки"), "Доставленную коробку нельзя взять снова")
+	code.text = "print('До')\nmove('north')\nprint('После')"
+	step.pressed.emit()
+	await create_timer(0.4).timeout
+	step.pressed.emit()
+	await process_frame
+	await process_frame
+	_expect(stop.disabled and messages.get_parsed_text().contains("ValueError"), "Ошибка завершает пошаговый запуск")
+	_expect(not messages.get_parsed_text().contains("После\n"), "После ошибки нет следующих инструкций")
+	_expect(code.get_line_background_color(1).a > 0, "Ошибка подсвечена фоном")
+	messages.meta_clicked.emit(Vector2i(2, 1))
+	_expect(code.get_caret_line() == 1 and code.get_caret_column() == 0 and code.has_focus(), "Ссылка переводит курсор и фокус к ошибке")
+	code.text = "print('Новый')"
+	step.pressed.emit()
+	_expect(not messages.get_parsed_text().contains("ValueError"), "Первый шаг очищает прежнюю ошибку")
+	while not stop.disabled:
+		await process_frame
+	_expect(code.get_line_background_color(0).a == 0, "После нового запуска фон ошибки снят")
+	code.text = "\nmove("
+	button.pressed.emit()
+	messages.meta_clicked.emit(Vector2i(2, 5))
+	_expect(code.get_caret_line() == 1 and code.get_caret_column() == 4, "Переход учитывает позицию синтаксической ошибки")
 	game.queue_free()
 	await process_frame
 

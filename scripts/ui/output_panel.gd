@@ -1,0 +1,36 @@
+extends VBoxContainer
+class_name OutputPanel
+
+signal error_location_clicked(line: int, column: int)
+
+@onready var _messages: RichTextLabel = $Messages
+
+
+func _ready() -> void:
+	_messages.meta_clicked.connect(_on_meta_clicked)
+
+
+func append_message(message: String) -> void:
+	show()
+	_messages.add_text(message + "\n")
+
+
+func clear_messages() -> void:
+	_messages.clear()
+	hide()
+
+
+func append_error(message: String, line: int = 0, column: int = 0) -> void:
+	show()
+	if line > 0:
+		_messages.push_meta(Vector2i(line, column))
+		_messages.add_text("Строка %d, позиция %d\n" % [line, column])
+		_messages.pop()
+	_messages.push_color(Color(1.0, 0.48, 0.43))
+	_messages.add_text(message + "\n")
+	_messages.pop()
+
+
+func _on_meta_clicked(meta: Variant) -> void:
+	if meta is Vector2i:
+		error_location_clicked.emit(meta.x, meta.y)

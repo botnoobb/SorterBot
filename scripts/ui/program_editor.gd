@@ -7,6 +7,7 @@ signal step_requested(source: String)
 
 const EXECUTION_COLOR := Color(1.0, 0.85, 0.25, 0.22)
 
+var _error_line: int = -1
 var _running: bool = false
 var _execution_line: int = -1
 
@@ -19,6 +20,7 @@ var _execution_line: int = -1
 
 
 func _ready() -> void:
+	_output.error_location_clicked.connect(_on_error_location_clicked)
 	_run_button.pressed.connect(_on_run_pressed)
 	_stop_button.pressed.connect(_on_stop_pressed)
 	_code.text_changed.connect(_on_text_changed)
@@ -53,11 +55,16 @@ func append_output(message: String) -> void:
 
 func clear_output() -> void:
 	_output.clear_messages()
+	_clear_error_line()
 
 
-func show_error(message: String) -> void:
+func show_error(message: String, line: int = 0, column: int = 0) -> void:
 	_message.text = ""
-	_output.append_error(message)
+	_output.append_error(message, line, column)
+	if line > 0 and line <= _code.get_line_count():
+		_clear_error_line()
+		_error_line = line - 1
+		_code.set_line_background_color(_error_line, Color(1.0, 0.2, 0.2, 0.22))
 
 
 func highlight_execution_line(source_line: int) -> void:
@@ -93,3 +100,21 @@ func _on_text_changed() -> void:
 
 func _on_step_pressed() -> void:
 	step_requested.emit(_code.text)
+
+
+func _clear_error_line() -> void:
+	# После правок фон может переместиться вместе со строкой.
+	if _error_line >= 0:
+		for line: int in range(_code.get_line_count()):
+			_code.set_line_background_color(line, Color(0, 0, 0, 0))
+	_error_line = -1
+
+
+func _on_error_location_clicked(line: int, column: int) -> void:
+	if line < 1 or line > _code.get_line_count():
+		return
+	_code.deselect()
+	_code.set_caret_line(line - 1)
+	_code.set_caret_column(clampi(column - 1, 0, _code.get_line(line - 1).length()))
+	_code.adjust_viewport_to_caret()
+	_code.grab_focus()
