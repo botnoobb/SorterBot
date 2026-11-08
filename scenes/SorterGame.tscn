@@ -69,3 +69,39 @@ offset_left = 16.0
 offset_top = 16.0
 text = "Доставьте коробку в отмеченную зону"
 mouse_filter = 2
+
+[node name="Lesson" type="Button" parent="."]
+offset_left = 16.0
+offset_top = 88.0
+offset_right = 146.0
+offset_bottom = 122.0
+text = "Объяснение"
+
+[node name="Help" type="Button" parent="."]
+offset_left = 154.0
+offset_top = 88.0
+offset_right = 254.0
+offset_bottom = 122.0
+text = "Справка"
+
+[node name="NextTask" type="Button" parent="."]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -52.0
+offset_right = 234.0
+offset_bottom = -16.0
+text = "Следующая задача"
+disabled = true
+
+[node name="HelpDialog" type="AcceptDialog" parent="."]
+size = Vector2i(620, 440)
+ok_button_text = "Понятно"
+
+[node name="Text" type="RichTextLabel" parent="HelpDialog"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 604.0
+offset_bottom = 390.0
+theme_override_font_sizes/normal_font_size = 18
