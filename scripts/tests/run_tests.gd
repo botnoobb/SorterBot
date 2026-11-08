@@ -17,11 +17,6 @@ func _run() -> void:
 		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 		quit(1 if _failures > 0 else 0)
 		return
-	if OS.get_cmdline_user_args().has("--fragment"):
-		await _test_fragment()
-		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
-		quit(1 if _failures > 0 else 0)
-		return
 	_test_parser()
 	_test_print_parser()
 	await _test_execution()
@@ -30,7 +25,6 @@ func _run() -> void:
 	await _test_delivery()
 	await _test_wrong_delivery()
 	await _test_reset_cargo()
-	await _test_fragment()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -158,7 +152,6 @@ func _test_scene() -> void:
 	var game: Control = packed.instantiate()
 	root.add_child(game)
 	await process_frame
-	game.get_node("HelpDialog").hide()
 	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
 	var code: CodeEdit = editor.get_node("Margin/Content/Code")
 	var button: Button = editor.get_node("Margin/Content/Header/Run")
@@ -396,15 +389,15 @@ func _test_scene() -> void:
 	stop.pressed.emit()
 	while not stop.disabled:
 		await process_frame
-	robot.cell = Vector2i(0, 3)
-	robot.position = Vector3(0, 0, 3)
-	code.text = "move('up')\ngrab()\n" + "move('right')\n".repeat(4) + "put()\nprint('Готово')"
+	robot.cell = Vector2i(1, 3)
+	robot.position = Vector3(1, 0, 3)
+	code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nput()\nprint('Готово')"
 	button.pressed.emit()
 	while not stop.disabled:
 		await process_frame
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	_expect(field.delivered and not field.carrying, "Доставка засчитана после put")
-	_expect(game.get_node("Goal").text.contains("Коробка доставлена"), "Успех виден игроку")
+	_expect(game.get_node("Goal").text == "Коробка доставлена", "Успех виден игроку")
 	_expect(messages.get_parsed_text() == "Готово\n", "После доставки программа продолжается")
 	code.text = "grab()"
 	button.pressed.emit()
@@ -445,7 +438,6 @@ func _expect(condition: bool, message: String) -> void:
 
 func _test_delivery() -> void:
 	var game: Control = load("res://scenes/SorterGame.tscn").instantiate()
-	game.get_node("Layout/Field/Viewport/World/Robot").position = Vector3(0, 0, 3)
 	root.add_child(game)
 	await process_frame
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
@@ -461,9 +453,9 @@ func _test_delivery() -> void:
 	_expect(field.carrying and not executor.action_error.is_empty(), "Повторный захват отклонён")
 	await executor.run(parser.parse("move('left')\nmove('left')"), robot.move, self, false, field.perform)
 	_expect(robot.cell == Vector2i(0, 2) and field.carrying, "Граница сохраняет позицию и груз")
-	var commands: Array[ProgramCommand] = parser.parse("move('right')\nmove('right')\nmove('right')\nmove('right')\nput()")
+	var commands: Array[ProgramCommand] = parser.parse("move('right')\nmove('right')\nmove('right')\nput()")
 	executor.run(commands, robot.move, self, true, field.perform)
-	for index: int in range(4):
+	for index: int in range(3):
 		while executor.is_running and not executor.is_paused:
 			await process_frame
 		_expect(executor.is_paused and not field.delivered, "Переноска по шагам не засчитывает доставку")
@@ -481,7 +473,6 @@ func _test_delivery() -> void:
 func _test_wrong_delivery() -> void:
 	for single_step: bool in [false, true]:
 		var game: Control = load("res://scenes/SorterGame.tscn").instantiate()
-		game.get_node("Layout/Field/Viewport/World/Robot").position = Vector3(0, 0, 3)
 		root.add_child(game)
 		await process_frame
 		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
@@ -538,7 +529,7 @@ func _test_wrong_delivery() -> void:
 		while executor.is_running:
 			await process_frame
 		_expect(messages.get_parsed_text() == "Робот уже несёт коробку.\n", "Повторный захват выводит только причину отказа")
-		code.text = "move('down')\nmove('right')\nmove('right')\nmove('right')\nmove('right')\nput()"
+		code.text = "move('down')\nmove('right')\nmove('right')\nput()"
 		run.pressed.emit()
 		while executor.is_running:
 			await process_frame
@@ -553,7 +544,6 @@ func _test_reset_cargo() -> void:
 	# Сброс во время движения, захвата, переноски, печати и ожидания шага.
 	for scenario: int in range(5):
 		var game: Control = packed.instantiate()
-		game.get_node("Layout/Field/Viewport/World/Robot").position = Vector3(0, 0, 3)
 		root.add_child(game)
 		await process_frame
 		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
@@ -607,7 +597,7 @@ func _test_reset_cargo() -> void:
 		while executor.is_running:
 			await process_frame
 		_expect(not executor.is_paused, "Восстановление завершает запуск вместе с ожиданием шага")
-		_expect(robot.cell == Vector2i(0, 3) and robot.position == Vector3(0, 0, 3), "Робот возвращён на старт карты")
+		_expect(robot.cell == Vector2i(1, 3) and robot.position == Vector3(1, 0, 3), "Робот возвращён на старт карты")
 		_expect(cargo == field.get("_cargo") and cargo.mesh == original_mesh, "Восстановлена та же коробка с прежним ресурсом")
 		_expect(cargo.get_parent() == field and cargo.position == original_position, "Коробка возвращена на выдачу")
 		_expect(not field.carrying and not field.delivered, "Груз снова доступен для захвата")
@@ -615,14 +605,14 @@ func _test_reset_cargo() -> void:
 		_expect(messages.get_parsed_text() == output_before_reset, "Восстановление сохраняет накопленный вывод")
 		executor.resume()
 		await create_timer(0.4).timeout
-		_expect(not executor.is_running and robot.cell == Vector2i(0, 3), "Старый запуск не продолжается после восстановления")
+		_expect(not executor.is_running and robot.cell == Vector2i(1, 3), "Старый запуск не продолжается после восстановления")
 		_expect(code.get_line_background_color(0).a == 0, "Подсветка выполнения снята")
 		# Исправление после неверной сдачи не теряется при восстановлении.
 		code.text = "move('up')\ngrab()\nput()"
 		run.pressed.emit()
 		while executor.is_running:
 			await process_frame
-		code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nmove('right')\nmove('right')\nput()"
+		code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nput()"
 		var fixed_source: String = code.text
 		reset.pressed.emit()
 		_expect(code.text == fixed_source and not field.carrying, "После ошибки восстановление сохраняет исправленный код")
@@ -635,7 +625,7 @@ func _test_reset_cargo() -> void:
 		while executor.is_running:
 			await process_frame
 		_expect(field.delivered and not field.carrying, "Восстановление во время put сохраняет успешную доставку")
-		_expect(game.get_node("Goal").text.contains("Коробка доставлена"), "Результат доставки сохранён")
+		_expect(game.get_node("Goal").text == "Коробка доставлена", "Результат доставки сохранён")
 		var delivered_position: Vector3 = cargo.position
 		reset.pressed.emit()
 		_expect(not reset.disabled and field.delivered and cargo.position == delivered_position, "После доставки кнопка доступна без отката результата")
@@ -656,97 +646,5 @@ func _test_reset_cargo() -> void:
 		await process_frame
 	editor.get_node("Margin/Content/ResetCargo").pressed.emit()
 	_expect(robot.cell == Vector2i(4, 4) and robot.position == Vector3(4, 0, 4), "Восстановление учитывает другую стартовую клетку карты")
-	game.queue_free()
-	await process_frame
-
-
-func _test_fragment() -> void:
-	var parser := ProgramParser.new()
-	for source: String in ["while True:\n", "while True\n    grab()", "while True:\ngrab()", "while True:\n    grab()\n      put()"]:
-		_expect(parser.parse(source).is_empty() and parser.error != null, "Неверный цикл отклонён: " + source)
-	var commands: Array[ProgramCommand] = parser.parse("print('до')\nwhile True:\n\tprint('тело')")
-	_expect(parser.error == null and commands.size() == 4, "Цикл с табуляцией разобран")
-	var executor := ProgramExecutor.new()
-	var lines: Array[int] = []
-	executor.step_started.connect(func(line: int) -> void: lines.append(line))
-	executor.run(commands, _record_move, self, true)
-	for expected: int in [1, 2, 3, 2, 3]:
-		while executor.is_running and not executor.is_paused:
-			await process_frame
-		_expect(executor.is_paused and lines.back() == expected, "Отдельный шаг условия/тела: %d" % expected)
-		if lines.size() < 5:
-			executor.resume(true)
-	executor.request_stop()
-	while executor.is_running:
-		await process_frame
-	_expect(executor.was_stopped, "Цикл без действий робота остановлен из паузы")
-	executor.run(parser.parse("while True:\n    print('повтор')"), _record_move, self)
-	await create_timer(0.4).timeout
-	executor.request_stop()
-	while executor.is_running:
-		await process_frame
-	_expect(executor.was_stopped, "Цикл без движений остановлен в автоматическом режиме")
-	var game: Control = load("res://scenes/SorterGame.tscn").instantiate()
-	root.add_child(game)
-	await process_frame
-	game.get_node("HelpDialog").hide()
-	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
-	var robot: SorterRobot = field.get_node("Robot")
-	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
-	var code: CodeEdit = editor.get_node("Margin/Content/Code")
-	var next: Button = game.get_node("NextTask")
-	var run: Button = editor.get_node("Margin/Content/Header/Run")
-	var active: ProgramExecutor = game.get("_executor")
-	_expect(code.text.is_empty() and next.disabled, "Начало без готового кода и без перехода")
-	var first: String = "move('left')\nmove('up')\ngrab()\n" + "move('right')\n".repeat(4) + "put()\nprint('После доставки')"
-	code.text = first
-	run.pressed.emit()
-	while not field.delivered and active.is_running:
-		await process_frame
-	_expect(active.is_running and next.disabled, "Успех не разрешает переход до завершения запуска")
-	while active.is_running:
-		await process_frame
-	_expect(field.delivered and not next.disabled, "Первая задача пройдена")
-	next.pressed.emit()
-	game.get_node("HelpDialog").hide()
-	_expect(code.text == first and robot.cell == Vector2i(1, 3), "Переход сохраняет код и возвращает робота")
-	_expect(field.zone_cell == Vector2i(4, 4) and not field.delivered, "Новая зона на краю")
-	run.pressed.emit()
-	while active.is_running:
-		await process_frame
-	_expect(field.carrying and next.disabled and active.action_error_line == 8, "Прежний маршрут отклонён в put")
-	_expect(code.get_line_background_color(7).a > 0, "Игровая ошибка подсвечена")
-	# Исправление из текущего положения, без восстановления.
-	code.text = "move('down')\nmove('down')\nput()"
-	run.pressed.emit()
-	while active.is_running:
-		await process_frame
-	_expect(field.delivered and not next.disabled, "Исправление доставляет сохранённую коробку")
-	next.pressed.emit()
-	game.get_node("HelpDialog").hide()
-	_expect(field.repeated_delivery and game.get("_deliveries") == 0, "Третья задача начинает повторную обработку с нуля")
-	var route: String = "move('left')\nmove('up')\nwhile True:\n    grab()\n" + "    move('right')\n".repeat(4) + "    move('down')\n    move('down')\n    put()\n" + "    move('left')\n".repeat(4) + "    move('up')\n    move('up')"
-	code.text = route
-	run.pressed.emit()
-	while game.get("_deliveries") < 5 and active.is_running:
-		await process_frame
-	_expect(game.get("_deliveries") == 5 and active.is_running, "5/5 достигнуто, цикл работает")
-	while not field.carrying and active.is_running:
-		await process_frame
-	_expect(field.carrying, "После успеха выдана следующая коробка")
-	editor.stop_requested.emit()
-	while active.is_running:
-		await process_frame
-	editor.cargo_reset_requested.emit()
-	_expect(game.get("_deliveries") == 5 and robot.cell == Vector2i(1, 3), "Восстановление сохраняет 5/5")
-	_expect(not field.carrying and not field.delivered and code.text == route, "Текущая коробка возвращена, код сохранён")
-	# Повторная доставка после успеха не увеличивает счётчик сверх цели.
-	robot.cell = SorterField.CARGO_CELL
-	robot.position = Vector3(0, 0, 2)
-	await field.perform(ProgramCommand.new(ProgramCommand.Type.GRAB, 1), 0.001)
-	robot.cell = field.zone_cell
-	robot.position = Vector3(4, 0, 4)
-	await field.perform(ProgramCommand.new(ProgramCommand.Type.PUT, 1), 0.001)
-	_expect(game.get("_deliveries") == 5 and not field.delivered, "Счётчик фиксирован на 5/5, выдача продолжается")
 	game.queue_free()
 	await process_frame
