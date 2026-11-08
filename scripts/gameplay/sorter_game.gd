@@ -52,10 +52,7 @@ func _start_program(source: String, single_step: bool = false) -> void:
 	_editor.clear_execution_line()
 	_editor.set_running(false)
 	if not _executor.action_error.is_empty():
-		if _field.delivery_failed:
-			_editor.show_delivery_error(_executor.action_error)
-		else:
-			_editor.show_error(_executor.action_error)
+		_editor.show_action_error(_executor.action_error)
 	elif _executor.error != null:
 		_editor.show_error(DiagnosticFormatter.format_error(_executor.error), _executor.error.line, _executor.error.column)
 	elif _executor.was_stopped:

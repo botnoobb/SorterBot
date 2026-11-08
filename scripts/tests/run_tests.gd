@@ -478,6 +478,16 @@ func _test_wrong_delivery() -> void:
 		var output: OutputPanel = editor.get_node("Margin/Content/OutputPanel")
 		var messages: RichTextLabel = output.get_node("Messages")
 		var executor: ProgramExecutor = game.get("_executor")
+		for sample: Array in [
+			["grab()", "На этой клетке нет коробки.\n"],
+			["put()", "У робота нет коробки.\n"],
+		]:
+			code.text = sample[0]
+			run.pressed.emit()
+			while executor.is_running:
+				await process_frame
+			_expect(output.visible and messages.get_parsed_text() == sample[1], "Игровой отказ раскрывает панель и выводится без префикса")
+		editor.clear_output()
 		code.text = "move('up')\ngrab()\nput()\nprint('После отказа')\nmove('right')"
 		_expect(not output.visible, "Перед ошибкой доставки панель скрыта")
 		if single_step:
@@ -493,7 +503,7 @@ func _test_wrong_delivery() -> void:
 			await process_frame
 		_expect(not executor.is_paused, "Ошибка доставки завершает запуск без ожидания шага")
 		_expect(output.visible, "Ошибка доставки раскрывает скрытую панель")
-		_expect(messages.get_parsed_text() == "Ошибка доставки: коробку нужно положить в зоне доставки.\n", "Отдельное сообщение ошибки доставки без последующего вывода")
+		_expect(messages.get_parsed_text() == "Коробку нужно положить в зоне доставки.\n", "Сообщение отказа без префикса и последующего вывода")
 		_expect(field.carrying and not field.delivered, "Отказ сохраняет коробку у робота без зачёта")
 		_expect(robot.cell == SorterField.CARGO_CELL, "После отказа следующие перемещения не выполняются")
 		_expect(game.get_node("Goal").text != "Коробка доставлена", "После отказа нет сообщения об успехе")
@@ -512,7 +522,7 @@ func _test_wrong_delivery() -> void:
 		run.pressed.emit()
 		while executor.is_running:
 			await process_frame
-		_expect(not messages.get_parsed_text().contains("Ошибка доставки:"), "Другой отказ не наследует вид ошибки доставки")
+		_expect(messages.get_parsed_text() == "Робот уже несёт коробку.\n", "Повторный захват выводит только причину отказа")
 		code.text = "move('down')\nmove('right')\nmove('right')\nput()"
 		run.pressed.emit()
 		while executor.is_running:

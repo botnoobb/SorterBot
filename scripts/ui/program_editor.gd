@@ -75,9 +75,9 @@ func highlight_execution_line(source_line: int) -> void:
 	_code.set_line_as_center_visible(_execution_line)
 
 
-func show_delivery_error(message: String) -> void:
+func show_action_error(message: String) -> void:
 	_message.text = ""
-	_output.append_delivery_error(message)
+	_output.append_action_error(message)
 
 
 func clear_execution_line() -> void:
