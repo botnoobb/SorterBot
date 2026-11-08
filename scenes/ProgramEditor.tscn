@@ -52,6 +52,11 @@ text = "■"
 tooltip_text = "Остановить после текущей инструкции"
 disabled = true
 
+[node name="ResetCargo" type="Button" parent="Margin/Content"]
+layout_mode = 2
+text = "Начать текущий груз заново"
+tooltip_text = "Завершить текущую инструкцию, вернуть робота на старт и текущую коробку на выдачу"
+
 [node name="Code" type="CodeEdit" parent="Margin/Content"]
 custom_minimum_size = Vector2(0, 180)
 layout_mode = 2

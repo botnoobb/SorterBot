@@ -4,6 +4,7 @@ class_name ProgramEditor
 signal run_requested(source: String)
 signal stop_requested()
 signal step_requested(source: String)
+signal cargo_reset_requested()
 
 const EXECUTION_COLOR := Color(1.0, 0.85, 0.25, 0.22)
 
@@ -15,6 +16,7 @@ var _execution_line: int = -1
 @onready var _run_button: Button = $Margin/Content/Header/Run
 @onready var _step_button: Button = $Margin/Content/Header/Step
 @onready var _stop_button: Button = $Margin/Content/Header/Stop
+@onready var _reset_cargo_button: Button = $Margin/Content/ResetCargo
 @onready var _message: Label = $Margin/Content/Message
 @onready var _output: OutputPanel = $Margin/Content/OutputPanel
 
@@ -25,6 +27,7 @@ func _ready() -> void:
 	_stop_button.pressed.connect(_on_stop_pressed)
 	_code.text_changed.connect(_on_text_changed)
 	_step_button.pressed.connect(_on_step_pressed)
+	_reset_cargo_button.pressed.connect(func() -> void: cargo_reset_requested.emit())
 	_step_button.disabled = false
 	_step_button.tooltip_text = "Выполнить одну инструкцию"
 

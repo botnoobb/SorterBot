@@ -12,6 +12,11 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	if OS.get_cmdline_user_args().has("--reset-cargo"):
+		await _test_reset_cargo()
+		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
+		quit(1 if _failures > 0 else 0)
+		return
 	_test_parser()
 	_test_print_parser()
 	await _test_execution()
@@ -19,6 +24,7 @@ func _run() -> void:
 	await _test_scene()
 	await _test_delivery()
 	await _test_wrong_delivery()
+	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -531,3 +537,114 @@ func _test_wrong_delivery() -> void:
 		_expect(not output.visible, "Успешный новый запуск очищает ошибку доставки")
 		game.queue_free()
 		await process_frame
+
+
+func _test_reset_cargo() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	# Сброс во время движения, захвата, переноски, печати и ожидания шага.
+	for scenario: int in range(5):
+		var game: Control = packed.instantiate()
+		root.add_child(game)
+		await process_frame
+		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+		var robot: SorterRobot = field.get_node("Robot")
+		var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+		var code: CodeEdit = editor.get_node("Margin/Content/Code")
+		var run: Button = editor.get_node("Margin/Content/Header/Run")
+		var step: Button = editor.get_node("Margin/Content/Header/Step")
+		var reset: Button = editor.get_node_or_null("Margin/Content/ResetCargo")
+		var messages: RichTextLabel = editor.get_node("Margin/Content/OutputPanel/Messages")
+		var executor: ProgramExecutor = game.get("_executor")
+		_expect(reset != null, "Есть отдельная кнопка восстановления груза")
+		if reset == null:
+			game.queue_free()
+			await process_frame
+			return
+		var cargo: MeshInstance3D = field.get("_cargo")
+		var original_mesh: Mesh = cargo.mesh
+		var original_position: Vector3 = cargo.position
+		reset.pressed.emit()
+		_expect(not reset.disabled and cargo.position == original_position, "На выдаче коробка остаётся на месте, кнопка доступна")
+		var source: String = "move('up')\ngrab()\nmove('right')\nprint('Нельзя продолжить')"
+		if scenario == 3:
+			source = "print('Сохранить')\nmove('right')"
+		code.text = source
+		if scenario == 4:
+			step.pressed.emit()
+			for index: int in range(2):
+				while executor.is_running and not executor.is_paused:
+					await process_frame
+				if index == 0:
+					step.pressed.emit()
+		else:
+			run.pressed.emit()
+			if scenario in [1, 2]:
+				while robot.cell != SorterField.CARGO_CELL:
+					await process_frame
+			if scenario == 2:
+				while not field.carrying:
+					await process_frame
+			await create_timer(0.1).timeout
+		var position_before_reset: Vector3 = robot.position
+		var output_before_reset: String = messages.get_parsed_text()
+		reset.pressed.emit()
+		reset.pressed.emit()
+		if scenario != 4:
+			_expect(executor.is_running and robot.position == position_before_reset, "Восстановление ждёт завершения текущего действия")
+		# Попытки запуска и шага во время ожидания не возобновляют старую программу.
+		run.pressed.emit()
+		step.pressed.emit()
+		while executor.is_running:
+			await process_frame
+		_expect(not executor.is_paused, "Восстановление завершает запуск вместе с ожиданием шага")
+		_expect(robot.cell == Vector2i(1, 3) and robot.position == Vector3(1, 0, 3), "Робот возвращён на старт карты")
+		_expect(cargo == field.get("_cargo") and cargo.mesh == original_mesh, "Восстановлена та же коробка с прежним ресурсом")
+		_expect(cargo.get_parent() == field and cargo.position == original_position, "Коробка возвращена на выдачу")
+		_expect(not field.carrying and not field.delivered, "Груз снова доступен для захвата")
+		_expect(code.text == source, "Восстановление сохраняет текст программы")
+		_expect(messages.get_parsed_text() == output_before_reset, "Восстановление сохраняет накопленный вывод")
+		executor.resume()
+		await create_timer(0.4).timeout
+		_expect(not executor.is_running and robot.cell == Vector2i(1, 3), "Старый запуск не продолжается после восстановления")
+		_expect(code.get_line_background_color(0).a == 0, "Подсветка выполнения снята")
+		# Исправление после неверной сдачи не теряется при восстановлении.
+		code.text = "move('up')\ngrab()\nput()"
+		run.pressed.emit()
+		while executor.is_running:
+			await process_frame
+		code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nput()"
+		var fixed_source: String = code.text
+		reset.pressed.emit()
+		_expect(code.text == fixed_source and not field.carrying, "После ошибки восстановление сохраняет исправленный код")
+		run.pressed.emit()
+		while executor.is_running and robot.cell != SorterField.ZONE_CELL:
+			await process_frame
+		# Восстановление во время сдачи не отменяет завершённую доставку.
+		await create_timer(0.1).timeout
+		reset.pressed.emit()
+		while executor.is_running:
+			await process_frame
+		_expect(field.delivered and not field.carrying, "Восстановление во время put сохраняет успешную доставку")
+		_expect(game.get_node("Goal").text == "Коробка доставлена", "Результат доставки сохранён")
+		var delivered_position: Vector3 = cargo.position
+		reset.pressed.emit()
+		_expect(not reset.disabled and field.delivered and cargo.position == delivered_position, "После доставки кнопка доступна без отката результата")
+		game.queue_free()
+		await process_frame
+	# Клетка появления берётся из карты, а не из фиксированных координат скрипта.
+	var game: Control = packed.instantiate()
+	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
+	robot.position = Vector3(4, 0, 4)
+	root.add_child(game)
+	await process_frame
+	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+	var executor: ProgramExecutor = game.get("_executor")
+	_expect(robot.cell == Vector2i(4, 4), "Карта задаёт клетку появления робота")
+	editor.get_node("Margin/Content/Code").text = "move('left')"
+	editor.get_node("Margin/Content/Header/Run").pressed.emit()
+	while executor.is_running:
+		await process_frame
+	editor.get_node("Margin/Content/ResetCargo").pressed.emit()
+	_expect(robot.cell == Vector2i(4, 4) and robot.position == Vector3(4, 0, 4), "Восстановление учитывает другую стартовую клетку карты")
+	game.queue_free()
+	await process_frame

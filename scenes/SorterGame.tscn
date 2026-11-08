@@ -59,6 +59,7 @@ rotation_degrees = Vector3(-60, -25, 0)
 light_energy = 1.2
 
 [node name="Robot" parent="Layout/Field/Viewport/World" instance=ExtResource("3")]
+position = Vector3(1, 0, 3)
 
 [node name="ProgramEditor" parent="Layout" instance=ExtResource("2")]
 layout_mode = 2

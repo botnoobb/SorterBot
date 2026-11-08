@@ -2,6 +2,7 @@ extends Control
 
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
+var _cargo_reset_requested: bool = false
 
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
@@ -14,12 +15,15 @@ func _ready() -> void:
 	_editor.run_requested.connect(_on_run_requested)
 	_editor.step_requested.connect(_on_step_requested)
 	_editor.stop_requested.connect(_executor.request_stop)
+	_editor.cargo_reset_requested.connect(_on_cargo_reset_requested)
 	_executor.output_emitted.connect(_editor.append_output)
 	_executor.pause_changed.connect(_editor.set_paused)
 	_executor.step_started.connect(_editor.highlight_execution_line)
 
 
 func _on_run_requested(source: String) -> void:
+	if _cargo_reset_requested:
+		return
 	if _executor.is_running:
 		if _executor.is_paused:
 			_executor.resume()
@@ -30,11 +34,30 @@ func _on_run_requested(source: String) -> void:
 
 
 func _on_step_requested(source: String) -> void:
+	if _cargo_reset_requested:
+		return
 	if _executor.is_running:
 		if _executor.is_paused:
 			_executor.resume(true)
 		return
 	_start_program(source, true)
+
+
+func _on_cargo_reset_requested() -> void:
+	if _cargo_reset_requested:
+		return
+	_cargo_reset_requested = true
+	if _executor.is_running:
+		_executor.request_stop()
+		return
+	_reset_current_cargo()
+
+
+func _reset_current_cargo() -> void:
+	_field.reset_current_cargo()
+	_editor.clear_execution_line()
+	_editor.show_message("Робот возвращён на старт." if _field.delivered else "Текущий груз возвращён на выдачу.")
+	_cargo_reset_requested = false
 
 
 func _start_program(source: String, single_step: bool = false) -> void:
@@ -51,6 +74,9 @@ func _start_program(source: String, single_step: bool = false) -> void:
 	await _executor.run(commands, _robot.move, get_tree(), single_step, _field.perform)
 	_editor.clear_execution_line()
 	_editor.set_running(false)
+	if _cargo_reset_requested:
+		_reset_current_cargo()
+		return
 	if not _executor.action_error.is_empty():
 		_editor.show_action_error(_executor.action_error)
 	elif _executor.error != null:

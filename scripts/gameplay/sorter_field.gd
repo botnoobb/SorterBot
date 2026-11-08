@@ -9,13 +9,14 @@ const ZONE_CELL := Vector2i(3, 2)
 var carrying: bool = false
 var delivered: bool = false
 var _cargo: MeshInstance3D
+var _robot_spawn_cell: Vector2i
 
 @onready var _robot: SorterRobot = $Robot
 
 
 func _ready() -> void:
-	_robot.cell = Vector2i(1, 3)
-	_robot.position = Vector3(1, 0, 3)
+	_robot_spawn_cell = Vector2i(roundi(_robot.position.x), roundi(_robot.position.z))
+	_robot.cell = _robot_spawn_cell
 	for x: int in range(5):
 		for y: int in range(5):
 			_box(Vector3(x, -0.08, y), Vector3(0.96, 0.1, 0.96), Color(0.2, 0.25, 0.3))
@@ -29,6 +30,16 @@ func _ready() -> void:
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.font_size = 32
 		add_child(label)
+
+
+func reset_current_cargo() -> void:
+	_robot.cell = _robot_spawn_cell
+	_robot.position = Vector3(_robot_spawn_cell.x, 0, _robot_spawn_cell.y)
+	if not delivered:
+		if _cargo.get_parent() != self:
+			_cargo.reparent(self)
+		_cargo.position = Vector3(CARGO_CELL.x + 0.4, 0.3, CARGO_CELL.y)
+		carrying = false
 
 
 func perform(command: ProgramCommand, duration: float) -> String:
