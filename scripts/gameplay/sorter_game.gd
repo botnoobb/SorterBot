@@ -1,5 +1,9 @@
 extends Control
 
+const EDITOR_LAYOUT_PATH := "user://editor_layout.cfg"
+const EDITOR_LAYOUT_SECTION := "editor"
+const EDITOR_WIDTH_KEY := "width"
+
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
@@ -7,6 +11,7 @@ var _cargo_reset_requested: bool = false
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
 @onready var _goal: Label = $Goal
+@onready var _layout: HSplitContainer = $Layout
 @onready var _robot: SorterRobot = $Layout/Field/Viewport/World/Robot
 
 
@@ -19,6 +24,30 @@ func _ready() -> void:
 	_executor.output_emitted.connect(_editor.append_output)
 	_executor.pause_changed.connect(_editor.set_paused)
 	_executor.step_started.connect(_editor.highlight_execution_line)
+	_layout.drag_ended.connect(_save_editor_width, CONNECT_DEFERRED)
+	_restore_editor_width.call_deferred()
+
+
+func _restore_editor_width() -> void:
+	var config := ConfigFile.new()
+	if config.load(EDITOR_LAYOUT_PATH) != OK:
+		return
+	var width: Variant = config.get_value(EDITOR_LAYOUT_SECTION, EDITOR_WIDTH_KEY, 0)
+	if typeof(width) != TYPE_INT or width <= 0:
+		return
+	# Фактическая ширина уже учитывает минимумы, поэтому сначала ограничиваем смещение.
+	_layout.clamp_split_offset()
+	var offset: int = _layout.split_offsets[0] + roundi(_editor.size.x) - width
+	_layout.split_offsets = PackedInt32Array([offset])
+	_layout.clamp_split_offset()
+
+
+func _save_editor_width() -> void:
+	var config := ConfigFile.new()
+	config.set_value(EDITOR_LAYOUT_SECTION, EDITOR_WIDTH_KEY, roundi(_editor.size.x))
+	var error := config.save(EDITOR_LAYOUT_PATH)
+	if error != OK:
+		push_warning("Не удалось сохранить ширину редактора: %s" % error_string(error))
 
 
 func _on_run_requested(source: String) -> void:
