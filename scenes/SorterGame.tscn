@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
@@ -12,6 +12,9 @@ background_color = Color(0.08, 0.12, 0.17, 1)
 ambient_light_source = 3
 ambient_light_color = Color(0.8, 0.87, 1, 1)
 ambient_light_energy = 0.7
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_divider"]
+bg_color = Color(0.059, 0.094, 0.157, 1)
 
 [node name="SorterGame" type="Control"]
 layout_mode = 3
@@ -29,7 +32,9 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/autohide = 0
+dragger_visibility = 1
+theme_override_constants/separation = 12
+theme_override_styles/split_bar_background = SubResource("StyleBoxFlat_divider")
 
 [node name="Field" type="SubViewportContainer" parent="Layout"]
 custom_minimum_size = Vector2(320, 240)

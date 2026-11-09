@@ -3,6 +3,10 @@ extends Control
 const EDITOR_LAYOUT_PATH := "user://editor_layout.cfg"
 const EDITOR_LAYOUT_SECTION := "editor"
 const EDITOR_WIDTH_KEY := "width"
+const DIVIDER_LINE_COLOR := Color("#243953")
+const DIVIDER_HANDLE_COLOR := Color("#537da9")
+const DIVIDER_HANDLE_HOVER_COLOR := Color("#82b4e8")
+const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
@@ -24,8 +28,22 @@ func _ready() -> void:
 	_executor.output_emitted.connect(_editor.append_output)
 	_executor.pause_changed.connect(_editor.set_paused)
 	_executor.step_started.connect(_editor.highlight_execution_line)
+
+	var drag_area: Control = _layout.get_drag_area_controls()[0]
+	drag_area.draw.connect(_draw_editor_divider.bind(drag_area))
+	drag_area.mouse_entered.connect(drag_area.queue_redraw)
+	drag_area.mouse_exited.connect(drag_area.queue_redraw)
 	_layout.drag_ended.connect(_save_editor_width, CONNECT_DEFERRED)
 	_restore_editor_width.call_deferred()
+
+
+func _draw_editor_divider(drag_area: Control) -> void:
+	var center := (drag_area.size * 0.5).floor()
+	drag_area.draw_rect(Rect2(center.x, 0, 1, drag_area.size.y), DIVIDER_LINE_COLOR)
+	var handle_position := center - DIVIDER_HANDLE_SIZE * 0.5
+	var hovered := get_viewport().gui_get_hovered_control() == drag_area
+	var handle_color := DIVIDER_HANDLE_HOVER_COLOR if hovered else DIVIDER_HANDLE_COLOR
+	drag_area.draw_rect(Rect2(handle_position, DIVIDER_HANDLE_SIZE), handle_color)
 
 
 func _restore_editor_width() -> void:
