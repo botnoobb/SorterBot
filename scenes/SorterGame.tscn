@@ -95,7 +95,7 @@ layout_mode = 1
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = -176.0
+offset_top = -200.0
 offset_right = 244.0
 offset_bottom = -16.0
 theme = ExtResource("5")
@@ -119,21 +119,29 @@ text = "Справка"
 
 [node name="Sections" type="VBoxContainer" parent="ReferencePanel/Content"]
 layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 6
 
 [node name="Movement" type="Button" parent="ReferencePanel/Content/Sections"]
 layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Движение"
 alignment = 0
 
 [node name="Cargo" type="Button" parent="ReferencePanel/Content/Sections"]
 layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Работа с коробкой"
 alignment = 0
 
 [node name="Output" type="Button" parent="ReferencePanel/Content/Sections"]
 layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Вывод"
 alignment = 0
@@ -145,6 +153,8 @@ size_flags_vertical = 3
 
 [node name="Back" type="Button" parent="ReferencePanel/Content/Detail"]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 36)
+theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "‹ Разделы"
 alignment = 0

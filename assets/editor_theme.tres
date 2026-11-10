@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=6 format=3]
+[gd_resource type="Theme" load_steps=8 format=3]
 
 [sub_resource type="SystemFont" id="Mono"]
 font_names = PackedStringArray("Consolas", "Courier New")
@@ -36,12 +36,34 @@ bg_color = Color(0.055, 0.095, 0.16, 1)
 
 [sub_resource type="StyleBoxEmpty" id="Focus"]
 
+[sub_resource type="StyleBoxFlat" id="ReferenceButton"]
+content_margin_left = 12.0
+content_margin_right = 12.0
+bg_color = Color(0.075, 0.125, 0.20, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+
+[sub_resource type="StyleBoxFlat" id="ReferenceButtonHover"]
+content_margin_left = 12.0
+content_margin_right = 12.0
+bg_color = Color(0.12, 0.21, 0.34, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+
 [resource]
 default_font_size = 18
 PanelContainer/styles/panel = SubResource("Panel")
 HeaderLabel/base_type = &"Label"
 HeaderLabel/styles/normal = SubResource("Header")
 HeaderLabel/colors/font_color = Color(0.92, 0.96, 1, 1)
+ReferenceButton/base_type = &"Button"
+ReferenceButton/styles/normal = SubResource("ReferenceButton")
+ReferenceButton/styles/hover = SubResource("ReferenceButtonHover")
+ReferenceButton/styles/pressed = SubResource("ReferenceButtonHover")
 CodeEdit/fonts/font = SubResource("Mono")
 CodeEdit/colors/font_color = Color(0.92, 0.96, 1, 1)
 CodeEdit/colors/font_readonly_color = Color(0.92, 0.96, 1, 1)

@@ -177,6 +177,12 @@ func _test_reference_panel() -> void:
 	var field_rect := field.get_global_rect()
 	var code_rect := code.get_global_rect()
 	var compact_rect := panel.get_global_rect()
+	var title: Label = panel.get_node("Content/Title")
+	var output: Button = sections.get_node("Output")
+	_expect(title.get_global_rect().position.y >= compact_rect.position.y + 8,
+			"Между заголовком справки и рамкой есть отступ")
+	_expect(output.get_global_rect().end.y <= compact_rect.end.y - 8,
+			"Последний раздел целиком помещается внутри карточки")
 
 	_click_reference_button(movement)
 	_expect(not detail.visible, "Текст появляется после раскрытия")
