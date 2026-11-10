@@ -79,24 +79,28 @@ func _ready() -> void:
 
 
 func _resize_lesson() -> void:
-	var width := minf(LESSON_MAX_WIDTH, _field_view.size.x - 2.0 * _lesson.offset_left)
-	_lesson.size.x = width
+	var available_width := _field_view.size.x - 2.0 * _lesson.offset_left
+	_lesson.size.x = minf(LESSON_MAX_WIDTH, available_width)
+
+	# Подбираем шрифт для самого широкого положения карточки в текущем окне.
+	var editor_minimum := ceilf(_editor.get_combined_minimum_size().x)
+	var editor_extra := maxf(0.0, _editor.size.x - editor_minimum)
+	var widest_card := minf(LESSON_MAX_WIDTH, available_width + editor_extra)
+	var text_width := (
+			widest_card - _lesson.get_theme_stylebox("panel").get_minimum_size().x
+			- _lesson_title.get_theme_stylebox("normal").get_minimum_size().x
+			- _lesson_header.get_theme_constant("separation")
+			- _lesson_toggle.get_combined_minimum_size().x
+	)
+	var font := _lesson_title.get_theme_font("font")
 	var font_size := _lesson_title.get_theme_default_font_size()
-	if _editor.size.x <= ceilf(_editor.get_combined_minimum_size().x):
-		var text_width := (
-				width - _lesson.get_theme_stylebox("panel").get_minimum_size().x
-				- _lesson_title.get_theme_stylebox("normal").get_minimum_size().x
-				- _lesson_header.get_theme_constant("separation")
-				- _lesson_toggle.get_combined_minimum_size().x
+	while font_size > 1:
+		var title_size := font.get_string_size(
+				_lesson_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size
 		)
-		var font := _lesson_title.get_theme_font("font")
-		while font_size > 1:
-			var title_size := font.get_string_size(
-					_lesson_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size
-			)
-			if ceilf(title_size.x) <= text_width:
-				break
-			font_size -= 1
+		if ceilf(title_size.x) <= text_width:
+			break
+		font_size -= 1
 	_lesson_title.add_theme_font_size_override("font_size", font_size)
 
 

@@ -195,8 +195,18 @@ func _test_lesson_width(game: Control, lesson: PanelContainer) -> void:
 	await process_frame
 	_expect(is_equal_approx(lesson.size.x, 380), "На широком поле карточка шириной 380 px")
 	_expect(title.get_line_count() == 1, "На широком поле заголовок занимает одну строку")
+	var wide_font_size := title.get_theme_font_size("font_size")
+
+	layout.clamp_split_offset()
+	layout.split_offsets = PackedInt32Array([layout.split_offsets[0] - 24])
+	await process_frame
+	await process_frame
+	_expect(is_equal_approx(lesson.size.x, 380), "Небольшой сдвиг не сужает карточку")
+	_expect(title.get_line_count() == 1, "При прежней ширине карточки заголовок не переносится")
+	_expect(title.get_theme_font_size("font_size") == wide_font_size, "Шрифт не скачет при сдвиге")
 
 	game.size.x = 672
+	layout.split_offsets = PackedInt32Array([10000])
 	await process_frame
 	await process_frame
 	_expect(title.get_line_count() == 1, "При минимальном редакторе переносов нет и в узком окне")
@@ -207,6 +217,7 @@ func _test_lesson_width(game: Control, lesson: PanelContainer) -> void:
 	await process_frame
 	await process_frame
 	_expect(title.get_line_count() > 1, "При расширении редактора заголовок может переноситься")
+	_expect(title.get_theme_font_size("font_size") == wide_font_size, "Перенос не увеличивает шрифт")
 	_expect(lesson.get_rect().end.x <= field.size.x - 16, "Карточка сужается вслед за полем")
 
 
