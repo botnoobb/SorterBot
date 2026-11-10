@@ -17,6 +17,7 @@ func _run() -> void:
 		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 		quit(1 if _failures > 0 else 0)
 		return
+	await _test_first_lesson()
 	_test_parser()
 	_test_print_parser()
 	await _test_execution()
@@ -146,6 +147,77 @@ func _record_move(direction: Vector2i, duration: float) -> void:
 	await create_timer(0.01).timeout
 	_moves.append(direction)
 	_action_running = false
+
+
+func _test_first_lesson() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	var game: Control = packed.instantiate()
+	root.add_child(game)
+	await process_frame
+	var lesson: PanelContainer = game.get_node_or_null("Lesson")
+	_expect(lesson != null and lesson.visible, "Задание доступно при запуске")
+	if lesson == null:
+		game.queue_free()
+		await process_frame
+		return
+
+	var toggle: Button = lesson.get_node("Content/Header/Toggle")
+	var details: RichTextLabel = lesson.get_node("Content/Details")
+	var delivery_program := 'move("up")\ngrab()\nmove("right")\nmove("right")\nput()'
+	var field: Control = game.get_node("Layout/Field")
+	var field_rect := field.get_global_rect()
+	_expect(not details.visible and not toggle.button_pressed, "Задание изначально свёрнуто")
+	_click_reference_button(toggle)
+	await process_frame
+	_expect(details.visible and details.text.contains('move("up")'), "В уроке есть первая команда")
+	_expect(details.text.contains(delivery_program), "В уроке есть проверенная программа доставки")
+	_expect(field.get_global_rect() == field_rect, "Карточка задания не сдвигает поле")
+	_click_reference_button(toggle)
+	await process_frame
+	_expect(not details.visible and not toggle.button_pressed, "Шеврон сворачивает задание")
+	_click_reference_button(toggle)
+	await process_frame
+	_expect(details.visible, "Урок можно открыть снова")
+	await _play_first_lesson(game, lesson.get_node("Content/Goal"), delivery_program)
+	game.queue_free()
+	await process_frame
+
+
+func _play_first_lesson(game: Control, goal: Label, delivery_program: String) -> void:
+	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
+
+	code.text = 'move("up")'
+	step.pressed.emit()
+	_expect(code.get_line_background_color(0).a > 0, "Первый шаг подсвечивает команду")
+	while not stop.disabled:
+		await process_frame
+	_expect(robot.cell == SorterField.CARGO_CELL, "Первый шаг ведёт к коробке")
+	reset.pressed.emit()
+	code.text = 'move("north")'
+	run.pressed.emit()
+	_expect(code.get_line_background_color(0).a > 0, "Ошибка направления выделяет строку")
+
+	code.text = delivery_program
+	run.pressed.emit()
+	stop.pressed.emit()
+	while not stop.disabled:
+		await process_frame
+	_expect(robot.cell == SorterField.CARGO_CELL, "Стоп завершает только текущую команду")
+	reset.pressed.emit()
+	step.pressed.emit()
+	while step.disabled:
+		await process_frame
+	_expect(robot.cell == SorterField.CARGO_CELL, "После первой команды программа на паузе")
+	run.pressed.emit()
+	while not stop.disabled:
+		await process_frame
+	_expect(goal.text == "Коробка доставлена", "Продолжение со второй строки завершает урок")
 
 
 func _test_reference_panel() -> void:
@@ -474,7 +546,7 @@ func _test_scene() -> void:
 			"Одна программа выполняет две доставки, робот остаётся в зоне"
 	)
 	_expect(field.delivered and not field.carrying, "Доставка засчитана после put")
-	_expect(game.get_node("Goal").text == "Коробка доставлена", "Успех виден игроку")
+	_expect(game.get_node("Lesson/Content/Goal").text == "Коробка доставлена", "Успех виден игроку")
 	_expect(messages.get_parsed_text() == "Готово\n", "После доставки программа продолжается")
 	code.text = "print('Новый запуск')"
 	await process_frame
@@ -595,7 +667,8 @@ func _test_wrong_delivery() -> void:
 		_expect(messages.get_parsed_text() == "Коробку нужно положить в зоне доставки.\n", "Сообщение отказа без префикса и последующего вывода")
 		_expect(field.carrying and not field.delivered, "Отказ сохраняет коробку у робота без зачёта")
 		_expect(robot.cell == SorterField.CARGO_CELL, "После отказа следующие перемещения не выполняются")
-		_expect(game.get_node("Goal").text != "Коробка доставлена", "После отказа нет сообщения об успехе")
+		var goal: Label = game.get_node("Lesson/Content/Goal")
+		_expect(goal.text != "Коробка доставлена", "После отказа нет сообщения об успехе")
 		executor.resume(true)
 		await process_frame
 		_expect(not executor.is_running and robot.cell == SorterField.CARGO_CELL, "Ошибочный запуск нельзя продолжить")
@@ -708,7 +781,8 @@ func _test_reset_cargo() -> void:
 		while executor.is_running:
 			await process_frame
 		_expect(field.delivered and not field.carrying, "Восстановление во время put сохраняет успешную доставку")
-		_expect(game.get_node("Goal").text == "Коробка доставлена", "Результат доставки сохранён")
+		var goal: Label = game.get_node("Lesson/Content/Goal")
+		_expect(goal.text == "Коробка доставлена", "Результат доставки сохранён")
 		var delivered_position: Vector3 = cargo.position
 		reset.pressed.emit()
 		_expect(not reset.disabled and field.delivered and cargo.position == delivered_position, "После доставки кнопка доступна без отката результата")

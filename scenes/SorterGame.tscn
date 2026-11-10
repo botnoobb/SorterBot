@@ -18,6 +18,10 @@ ambient_light_energy = 0.7
 bg_color = Color(0.059, 0.094, 0.157, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_reference"]
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
 bg_color = Color(0.055, 0.095, 0.16, 1)
 border_width_left = 1
 border_width_top = 1
@@ -83,11 +87,70 @@ position = Vector3(1, 0, 3)
 [node name="ProgramEditor" parent="Layout" instance=ExtResource("2")]
 layout_mode = 2
 
-[node name="Goal" type="Label" parent="."]
+[node name="Lesson" type="PanelContainer" parent="."]
+layout_mode = 0
 offset_left = 16.0
 offset_top = 16.0
-text = "Доставьте коробку в отмеченную зону"
+offset_right = 304.0
+offset_bottom = 16.0
+theme = ExtResource("5")
+theme_override_styles/panel = SubResource("StyleBoxFlat_reference")
+
+[node name="Content" type="VBoxContainer" parent="Lesson"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Header" type="HBoxContainer" parent="Lesson/Content"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Lesson/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HeaderLabel"
+text = "Первое знакомство с командами"
+autowrap_mode = 2
+
+[node name="Toggle" type="Button" parent="Lesson/Content/Header"]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+focus_mode = 0
+toggle_mode = true
+text = "⌄"
+tooltip_text = "Развернуть задание"
+
+[node name="Goal" type="Label" parent="Lesson/Content"]
+layout_mode = 2
+text = "Запрограммируйте робота и доставьте коробку."
+autowrap_mode = 2
 mouse_filter = 2
+
+[node name="Details" type="RichTextLabel" parent="Lesson/Content"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 16
+text = "Прочитайте шаг и сверните карточку стрелкой ↑, чтобы лучше видеть поле. Урок можно открыть снова в любой момент.
+
+1. Сделайте первый шаг
+
+Введите move(\"up\") в редактор справа. Команда двигает робота на одну клетку вверх. Нажмите «Шаг» (▷) и посмотрите, какая строка подсвечивается во время движения. Описание команды есть в справке «Движение».
+
+2. Найдите ошибку
+
+Нажмите «Начать текущий груз заново», замените up на north и нажмите «Запустить» (▶). Посмотрите, на какую строку указывает сообщение в панели «Вывод», затем исправьте направление на up.
+
+3. Доставьте коробку
+
+Введите программу:
+
+move(\"up\")
+grab()
+move(\"right\")
+move(\"right\")
+put()
+
+Запустите её и нажмите «Стоп» (■) во время движения. Робот закончит текущую команду и остановится. Нажмите «Начать текущий груз заново». Выполните первую строку кнопкой «Шаг», дождитесь паузы и нажмите «Запустить». Робот продолжит со следующей строки и доставит коробку."
 
 [node name="ReferencePanel" type="Panel" parent="."]
 clip_contents = true

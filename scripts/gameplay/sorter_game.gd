@@ -8,7 +8,7 @@ const DIVIDER_HANDLE_COLOR := Color("#537da9")
 const DIVIDER_HANDLE_HOVER_COLOR := Color("#82b4e8")
 const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
-const REFERENCE_EXPANDED_TOP := 56.0
+const LESSON_REFERENCE_GAP := 16.0
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
 		+ 'Направления: "up", "down", "left", "right".\n\n'
@@ -31,8 +31,11 @@ var _cargo_reset_requested: bool = false
 
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
-@onready var _goal: Label = $Goal
+@onready var _goal: Label = $Lesson/Content/Goal
 @onready var _layout: HSplitContainer = $Layout
+@onready var _lesson: PanelContainer = $Lesson
+@onready var _lesson_details: RichTextLabel = $Lesson/Content/Details
+@onready var _lesson_toggle: Button = $Lesson/Content/Header/Toggle
 @onready var _reference_panel: Panel = $ReferencePanel
 @onready var _reference_compact_top: float = _reference_panel.offset_top
 @onready var _reference_sections: VBoxContainer = $ReferencePanel/Content/Sections
@@ -64,9 +67,25 @@ func _ready() -> void:
 	$ReferencePanel/Content/Sections/Cargo.pressed.connect(_open_reference.bind(CARGO_REFERENCE))
 	$ReferencePanel/Content/Sections/Output.pressed.connect(_open_reference.bind(OUTPUT_REFERENCE))
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
+	_lesson_toggle.toggled.connect(_toggle_lesson)
+
+
+func _toggle_lesson(expanded: bool) -> void:
+	_lesson_details.visible = expanded
+	_lesson_toggle.text = "⌃" if expanded else "⌄"
+	_lesson_toggle.tooltip_text = "Свернуть задание" if expanded else "Развернуть задание"
+	if expanded:
+		_lesson.set_anchor_and_offset(
+				SIDE_BOTTOM, 1.0, _reference_compact_top - LESSON_REFERENCE_GAP
+		)
+		if _reference_detail.visible:
+			_close_reference()
+	else:
+		_lesson.set_anchor_and_offset(SIDE_BOTTOM, 0.0, _lesson.offset_top)
 
 
 func _open_reference(article: String) -> void:
+	_lesson_toggle.button_pressed = false
 	_reference_article.text = article
 	_reference_article.scroll_to_line(0)
 	await _animate_reference(true)
@@ -79,14 +98,19 @@ func _close_reference() -> void:
 
 
 func _animate_reference(expanded: bool) -> void:
+	_lesson_toggle.disabled = true
 	_reference_sections.hide()
 	_reference_detail.hide()
+	await get_tree().process_frame
 	var top_anchor := 0.0 if expanded else 1.0
-	var top_offset := REFERENCE_EXPANDED_TOP if expanded else _reference_compact_top
+	var top_offset := (
+			_lesson.get_rect().end.y + LESSON_REFERENCE_GAP if expanded else _reference_compact_top
+	)
 	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.tween_property(_reference_panel, "anchor_top", top_anchor, REFERENCE_ANIMATION_DURATION)
 	tween.tween_property(_reference_panel, "offset_top", top_offset, REFERENCE_ANIMATION_DURATION)
 	await tween.finished
+	_lesson_toggle.disabled = false
 
 
 func _draw_editor_divider(drag_area: Control) -> void:
