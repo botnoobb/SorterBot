@@ -23,6 +23,8 @@ func tokenize(source: String) -> Array[Token]:
 			line_start = position + 1
 		elif character == ",":
 			tokens.append(Token.new(Token.Type.COMMA, character, line, column))
+		elif character == "=":
+			tokens.append(Token.new(Token.Type.EQUALS, character, line, column))
 		elif character == "(" or character == ")":
 			var type: Token.Type = Token.Type.LEFT_PAREN
 			if character == ")":
@@ -46,7 +48,8 @@ func tokenize(source: String) -> Array[Token]:
 			))
 		elif _is_letter(character):
 			var start: int = position
-			while position < text.length() and _is_letter(text[position]):
+			position += 1
+			while position < text.length() and _is_identifier_character(text[position]):
 				position += 1
 			tokens.append(Token.new(
 				Token.Type.IDENTIFIER, text.substr(start, position - start), line, column
@@ -66,3 +69,7 @@ func _is_letter(character: String) -> bool:
 		or (character >= "A" and character <= "Z")
 		or character == "_"
 	)
+
+
+func _is_identifier_character(character: String) -> bool:
+	return _is_letter(character) or (character >= "0" and character <= "9")

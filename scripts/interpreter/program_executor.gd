@@ -16,7 +16,11 @@ var error: ProgramDiagnostic
 var action_error: String = ""
 
 
-func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree, single_step: bool = false, game_action: Callable = Callable()) -> bool:
+func run(
+		commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree,
+		single_step: bool = false, game_action: Callable = Callable(),
+		read_cargo_color: Callable = Callable()
+) -> bool:
 	if is_running:
 		return false
 	error = null
@@ -26,6 +30,7 @@ func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree
 	_pause_requested = single_step
 	is_paused = false
 	is_running = true
+	var variables: Dictionary[String, String] = {}
 	for index: int in range(commands.size()):
 		var command: ProgramCommand = commands[index]
 		step_started.emit(command.line)
@@ -34,7 +39,17 @@ func run(commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree
 			is_running = false
 			return false
 		# Следующая команда ждёт завершения движения робота.
-		if command.type != ProgramCommand.Type.PRINT and game_action.is_valid():
+		if command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
+			var value := _read_expression(command, variables, read_cargo_color)
+			if error != null:
+				is_running = false
+				return false
+			if command.type == ProgramCommand.Type.ASSIGN:
+				variables[command.target_variable] = value
+			else:
+				output_emitted.emit(value)
+			await tree.create_timer(STEP_DURATION).timeout
+		elif game_action.is_valid():
 			action_error = await game_action.call(command, STEP_DURATION)
 			if not action_error.is_empty():
 				is_running = false
@@ -75,3 +90,26 @@ func resume(single_step: bool = false) -> void:
 		_pause_requested = single_step
 		is_paused = false
 		pause_changed.emit(false)
+
+
+func _read_expression(
+		command: ProgramCommand, variables: Dictionary[String, String], read_cargo_color: Callable
+) -> String:
+	match command.operand_kind:
+		ProgramCommand.OperandKind.LITERAL:
+			return command.text
+		ProgramCommand.OperandKind.VARIABLE:
+			if variables.has(command.text):
+				return variables[command.text]
+			error = ProgramDiagnostic.new(
+					"NameError", "name '%s' is not defined" % command.text,
+					command.program_source, command.line, command.operand_column, true
+			)
+		ProgramCommand.OperandKind.CARGO_COLOR:
+			if read_cargo_color.is_valid():
+				return read_cargo_color.call()
+			error = ProgramDiagnostic.new(
+					"RuntimeError", "cargo color is unavailable",
+					command.program_source, command.line, command.operand_column, true
+			)
+	return ""

@@ -6,6 +6,8 @@ signal cargo_delivered()
 const CARGO_CELL := Vector2i(1, 2)
 const ZONE_CELL := Vector2i(3, 2)
 const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.3, CARGO_CELL.y)
+const CARGO_COLOR := Color(0.95, 0.65, 0.2)
+const CARGO_COLOR_NAME := "оранжевая"
 
 var carrying: bool = false
 # Результат доставки сохраняется до захвата следующей коробки.
@@ -24,7 +26,7 @@ func _ready() -> void:
 			_box(Vector3(x, -0.08, y), Vector3(0.96, 0.1, 0.96), Color(0.2, 0.25, 0.3))
 	_box(Vector3(CARGO_CELL.x, 0, CARGO_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.5, 0.9))
 	_box(Vector3(ZONE_CELL.x, 0, ZONE_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.8, 0.4))
-	_cargo = _box(CARGO_POSITION, Vector3(0.45, 0.5, 0.45), Color(0.95, 0.65, 0.2))
+	_cargo = _box(CARGO_POSITION, Vector3(0.45, 0.5, 0.45), CARGO_COLOR)
 	for item: Array in [["Выдача", Vector3(1, 0.1, 1.5)], ["Зона доставки", Vector3(3, 0.1, 1.5)]]:
 		var label := Label3D.new()
 		label.text = item[0]
@@ -32,6 +34,10 @@ func _ready() -> void:
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.font_size = 32
 		add_child(label)
+
+
+func get_cargo_color() -> String:
+	return CARGO_COLOR_NAME
 
 
 func reset_current_cargo() -> void:

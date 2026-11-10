@@ -17,6 +17,7 @@ func _run() -> void:
 		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 		quit(1 if _failures > 0 else 0)
 		return
+	await _test_variables()
 	await _test_first_lesson()
 	_test_parser()
 	_test_print_parser()
@@ -29,6 +30,49 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_variables() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	var game: Control = packed.instantiate()
+	root.add_child(game)
+	await process_frame
+	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var run: Button = content.get_node("Header/Run")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	code.text = (
+			"color = cargo_color()\nsaved = color\n"
+			+ 'color = "синяя"\nprint(saved)\nprint(color)\n'
+			+ "move('up')\ngrab()\ncolor = cargo_color()\nprint(color)"
+	)
+	step.pressed.emit()
+	var deadline := create_timer(8.0)
+	while step.disabled and not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	var paused := not step.disabled and not stop.disabled
+	_expect(paused, "После присваивания пошаговый запуск ставит программу на паузу")
+	if paused:
+		run.pressed.emit()
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(output.get_parsed_text() == "оранжевая\nсиняя\nоранжевая\n",
+			"Строковые переменные сохраняются между шагами и копируются по значению")
+	code.text = "print(color)"
+	run.pressed.emit()
+	_expect(output.get_parsed_text().contains("NameError: name 'color' is not defined"),
+			"Новый запуск не наследует переменные")
+	_expect(code.get_line_background_color(0).a > 0, "Неизвестная переменная выделяет строку")
+	var reference: Panel = game.get_node("ReferencePanel")
+	_click_reference_button(reference.get_node("Content/Sections/Output"))
+	await create_timer(0.4).timeout
+	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	_expect(article.is_visible_in_tree() and article.text.contains("saved = color"),
+			"Справка объясняет сохранение и копирование значения")
+	game.queue_free()
+	await process_frame
 
 
 func _test_parser() -> void:
@@ -87,9 +131,8 @@ func _test_print_parser() -> void:
 	if commands.size() == 2:
 		_expect(commands[0].text == "Привет", "Строка выводится без кавычек")
 		_expect(commands[1].text.is_empty(), "Допустима пустая строка")
-	for source: String in ["print(42)", "print(text)"]:
-		commands = parser.parse(source)
-		_expect(commands.is_empty() and not (parser.error == null), "Неверный print")
+	commands = parser.parse("print(42)")
+	_expect(commands.is_empty() and parser.error != null, "print не принимает число")
 
 
 func _record_step(line: int) -> void:

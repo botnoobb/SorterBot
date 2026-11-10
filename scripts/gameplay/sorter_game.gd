@@ -22,8 +22,12 @@ const CARGO_REFERENCE := (
 		+ 'move("right")\nmove("right")\nput()'
 )
 const OUTPUT_REFERENCE := (
-		"Вывод\n\nprint(строка) выводит текст. Строку нужно заключить в кавычки.\n\n"
-		+ 'Пример:\nprint("Готово")'
+		"Вывод\n\nprint() выводит текст. Пишите текст в кавычках, а имя переменной без них.\n\n"
+		+ 'Пример:\nprint("Готово")\n\n'
+		+ "Переменные\n\nСохраните цвет коробки под именем color, чтобы использовать его позже. "
+		+ "saved = color копирует текущее значение. Новое присваивание меняет color, "
+		+ "а saved хранит прежнюю строку. Цвет самой коробки при этом не меняется.\n\n"
+		+ 'color = cargo_color()\nsaved = color\ncolor = "синяя"\nprint(saved)\nprint(color)'
 )
 
 var _parser := ProgramParser.new()
@@ -234,7 +238,9 @@ func _start_program(source: String, single_step: bool = false) -> void:
 		return
 	_editor.set_running(true)
 	_editor.show_message("Программа выполняется…")
-	await _executor.run(commands, _robot.move, get_tree(), single_step, _field.perform)
+	await _executor.run(
+			commands, _robot.move, get_tree(), single_step, _field.perform, _field.get_cargo_color
+	)
 	_editor.clear_execution_line()
 	_editor.set_running(false)
 	if _cargo_reset_requested:
