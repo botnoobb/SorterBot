@@ -179,8 +179,35 @@ func _test_first_lesson() -> void:
 	await process_frame
 	_expect(details.visible, "Урок можно открыть снова")
 	await _play_first_lesson(game, lesson.get_node("Content/Goal"), delivery_program)
+	await _test_lesson_width(game, lesson)
 	game.queue_free()
 	await process_frame
+
+
+func _test_lesson_width(game: Control, lesson: PanelContainer) -> void:
+	var layout: HSplitContainer = game.get_node("Layout")
+	var field: Control = layout.get_node("Field")
+	var title: Label = lesson.get_node("Content/Header/Title")
+	game.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	game.size.x = 1152
+	layout.split_offsets = PackedInt32Array([10000])
+	await process_frame
+	await process_frame
+	_expect(is_equal_approx(lesson.size.x, 380), "На широком поле карточка шириной 380 px")
+	_expect(title.get_line_count() == 1, "На широком поле заголовок занимает одну строку")
+
+	game.size.x = 672
+	await process_frame
+	await process_frame
+	_expect(title.get_line_count() == 1, "При минимальном редакторе переносов нет и в узком окне")
+	_expect(lesson.get_rect().end.x <= field.size.x - 16, "Карточка помещается на узком поле")
+
+	game.size.x = 1152
+	layout.split_offsets = PackedInt32Array([-10000])
+	await process_frame
+	await process_frame
+	_expect(title.get_line_count() > 1, "При расширении редактора заголовок может переноситься")
+	_expect(lesson.get_rect().end.x <= field.size.x - 16, "Карточка сужается вслед за полем")
 
 
 func _play_first_lesson(game: Control, goal: Label, delivery_program: String) -> void:

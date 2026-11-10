@@ -9,6 +9,7 @@ const DIVIDER_HANDLE_HOVER_COLOR := Color("#82b4e8")
 const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
+const LESSON_MAX_WIDTH := 380.0
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
 		+ 'Направления: "up", "down", "left", "right".\n\n'
@@ -33,8 +34,11 @@ var _cargo_reset_requested: bool = false
 @onready var _field: SorterField = $Layout/Field/Viewport/World
 @onready var _goal: Label = $Lesson/Content/Goal
 @onready var _layout: HSplitContainer = $Layout
+@onready var _field_view: Control = $Layout/Field
 @onready var _lesson: PanelContainer = $Lesson
 @onready var _lesson_details: RichTextLabel = $Lesson/Content/Details
+@onready var _lesson_header: HBoxContainer = $Lesson/Content/Header
+@onready var _lesson_title: Label = $Lesson/Content/Header/Title
 @onready var _lesson_toggle: Button = $Lesson/Content/Header/Toggle
 @onready var _reference_panel: Panel = $ReferencePanel
 @onready var _reference_compact_top: float = _reference_panel.offset_top
@@ -68,6 +72,37 @@ func _ready() -> void:
 	$ReferencePanel/Content/Sections/Output.pressed.connect(_open_reference.bind(OUTPUT_REFERENCE))
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
+	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)
+	_editor.resized.connect(_resize_lesson, CONNECT_DEFERRED)
+	_lesson.resized.connect(_sync_reference_top)
+	_resize_lesson.call_deferred()
+
+
+func _resize_lesson() -> void:
+	var width := minf(LESSON_MAX_WIDTH, _field_view.size.x - 2.0 * _lesson.offset_left)
+	_lesson.size.x = width
+	var font_size := _lesson_title.get_theme_default_font_size()
+	if _editor.size.x <= ceilf(_editor.get_combined_minimum_size().x):
+		var text_width := (
+				width - _lesson.get_theme_stylebox("panel").get_minimum_size().x
+				- _lesson_title.get_theme_stylebox("normal").get_minimum_size().x
+				- _lesson_header.get_theme_constant("separation")
+				- _lesson_toggle.get_combined_minimum_size().x
+		)
+		var font := _lesson_title.get_theme_font("font")
+		while font_size > 1:
+			var title_size := font.get_string_size(
+					_lesson_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size
+			)
+			if ceilf(title_size.x) <= text_width:
+				break
+			font_size -= 1
+	_lesson_title.add_theme_font_size_override("font_size", font_size)
+
+
+func _sync_reference_top() -> void:
+	if _reference_detail.visible:
+		_reference_panel.offset_top = _lesson.get_rect().end.y + LESSON_REFERENCE_GAP
 
 
 func _toggle_lesson(expanded: bool) -> void:
@@ -90,6 +125,7 @@ func _open_reference(article: String) -> void:
 	_reference_article.scroll_to_line(0)
 	await _animate_reference(true)
 	_reference_detail.show()
+	_sync_reference_top()
 
 
 func _close_reference() -> void:
