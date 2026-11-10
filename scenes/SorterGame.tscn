@@ -1,10 +1,11 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Robot.tscn" id="3"]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_field.gd" id="4"]
+[ext_resource type="Theme" path="res://assets/editor_theme.tres" id="5"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1
@@ -15,6 +16,18 @@ ambient_light_energy = 0.7
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_divider"]
 bg_color = Color(0.059, 0.094, 0.157, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_reference"]
+bg_color = Color(0.055, 0.095, 0.16, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.29, 0.43, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_left = 5
+corner_radius_bottom_right = 5
 
 [node name="SorterGame" type="Control"]
 layout_mode = 3
@@ -75,3 +88,69 @@ offset_left = 16.0
 offset_top = 16.0
 text = "Доставьте коробку в отмеченную зону"
 mouse_filter = 2
+
+[node name="ReferencePanel" type="Panel" parent="."]
+clip_contents = true
+layout_mode = 1
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -176.0
+offset_right = 244.0
+offset_bottom = -16.0
+theme = ExtResource("5")
+theme_override_styles/panel = SubResource("StyleBoxFlat_reference")
+
+[node name="Content" type="VBoxContainer" parent="ReferencePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="ReferencePanel/Content"]
+layout_mode = 2
+theme_type_variation = &"HeaderLabel"
+text = "Справка"
+
+[node name="Sections" type="VBoxContainer" parent="ReferencePanel/Content"]
+layout_mode = 2
+
+[node name="Movement" type="Button" parent="ReferencePanel/Content/Sections"]
+layout_mode = 2
+focus_mode = 0
+text = "Движение"
+alignment = 0
+
+[node name="Cargo" type="Button" parent="ReferencePanel/Content/Sections"]
+layout_mode = 2
+focus_mode = 0
+text = "Работа с коробкой"
+alignment = 0
+
+[node name="Output" type="Button" parent="ReferencePanel/Content/Sections"]
+layout_mode = 2
+focus_mode = 0
+text = "Вывод"
+alignment = 0
+
+[node name="Detail" type="VBoxContainer" parent="ReferencePanel/Content"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Back" type="Button" parent="ReferencePanel/Content/Detail"]
+layout_mode = 2
+focus_mode = 0
+text = "‹ Разделы"
+alignment = 0
+
+[node name="Article" type="RichTextLabel" parent="ReferencePanel/Content/Detail"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+theme_override_font_sizes/normal_font_size = 16

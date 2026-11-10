@@ -22,6 +22,7 @@ func _run() -> void:
 	await _test_execution()
 	await _test_diagnostics()
 	await _test_scene()
+	await _test_reference_panel()
 	await _test_delivery()
 	await _test_wrong_delivery()
 	await _test_reset_cargo()
@@ -145,6 +146,66 @@ func _record_move(direction: Vector2i, duration: float) -> void:
 	await create_timer(0.01).timeout
 	_moves.append(direction)
 	_action_running = false
+
+
+func _test_reference_panel() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	var game: Control = packed.instantiate()
+	root.add_child(game)
+	await process_frame
+	var panel: Panel = game.get_node_or_null("ReferencePanel")
+	_expect(panel != null and panel.visible, "Справка доступна при запуске сцены")
+	if panel == null:
+		game.queue_free()
+		return
+
+	var code: CodeEdit = game.get_node("Layout/ProgramEditor/Margin/Content/Code")
+	var field: Control = game.get_node("Layout/Field")
+	var sections: VBoxContainer = panel.get_node("Content/Sections")
+	var detail: VBoxContainer = panel.get_node("Content/Detail")
+	var article: RichTextLabel = detail.get_node("Article")
+	var movement: Button = sections.get_node("Movement")
+	var back: Button = detail.get_node("Back")
+	var source := "print('Строка')\n".repeat(80)
+	code.text = source
+	code.set_caret_line(40)
+	code.set_caret_column(5)
+	code.grab_focus()
+	await process_frame
+	code.scroll_vertical = 35
+	var scroll := code.scroll_vertical
+	var field_rect := field.get_global_rect()
+	var code_rect := code.get_global_rect()
+	var compact_rect := panel.get_global_rect()
+
+	_click_reference_button(movement)
+	_expect(not detail.visible, "Текст появляется после раскрытия")
+	await create_timer(0.4).timeout
+	_expect(detail.visible and article.text.contains('move("up")'), "В справке есть пример")
+	_expect(panel.size.y > compact_rect.size.y, "Карточка раскрывается вверх")
+	_expect(is_equal_approx(panel.get_global_rect().end.y, compact_rect.end.y),
+			"Нижний край карточки закреплён")
+	_expect(field.get_global_rect() == field_rect, "При раскрытии поле остаётся на месте")
+	_click_reference_button(back)
+	await create_timer(0.4).timeout
+	_expect(sections.visible and panel.get_global_rect() == compact_rect, "Возврат к списку")
+	_expect(code.text == source and code.get_caret_line() == 40 and code.get_caret_column() == 5,
+			"Справка сохраняет текст и курсор")
+	_expect(code.scroll_vertical == scroll and code.has_focus(), "Сохраняются прокрутка и фокус")
+	_expect(code.get_global_rect() == code_rect, "Редактор остаётся на месте")
+	_expect(field.get_global_rect() == field_rect, "При сворачивании поле остаётся на месте")
+	game.queue_free()
+	await process_frame
+
+
+func _click_reference_button(button: Button) -> void:
+	var event := InputEventMouseButton.new()
+	event.position = button.get_global_rect().get_center()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = true
+	root.push_input(event, true)
+	event.pressed = false
+	root.push_input(event, true)
 
 
 func _test_scene() -> void:

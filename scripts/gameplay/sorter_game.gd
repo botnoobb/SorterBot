@@ -7,6 +7,23 @@ const DIVIDER_LINE_COLOR := Color("#243953")
 const DIVIDER_HANDLE_COLOR := Color("#537da9")
 const DIVIDER_HANDLE_HOVER_COLOR := Color("#82b4e8")
 const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
+const REFERENCE_ANIMATION_DURATION := 0.22
+const REFERENCE_EXPANDED_TOP := 56.0
+const MOVEMENT_REFERENCE := (
+		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
+		+ 'Направления: "up", "down", "left", "right".\n\n'
+		+ 'Пример:\nmove("up")'
+)
+const CARGO_REFERENCE := (
+		"Работа с коробкой\n\ngrab() берёт коробку на клетке выдачи. "
+		+ "put() кладёт её в зоне доставки.\n\n"
+		+ 'Пример со старта:\nmove("up")\ngrab()\n'
+		+ 'move("right")\nmove("right")\nput()'
+)
+const OUTPUT_REFERENCE := (
+		"Вывод\n\nprint(строка) выводит текст. Строку нужно заключить в кавычки.\n\n"
+		+ 'Пример:\nprint("Готово")'
+)
 
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
@@ -16,6 +33,11 @@ var _cargo_reset_requested: bool = false
 @onready var _field: SorterField = $Layout/Field/Viewport/World
 @onready var _goal: Label = $Goal
 @onready var _layout: HSplitContainer = $Layout
+@onready var _reference_panel: Panel = $ReferencePanel
+@onready var _reference_compact_top: float = _reference_panel.offset_top
+@onready var _reference_sections: VBoxContainer = $ReferencePanel/Content/Sections
+@onready var _reference_detail: VBoxContainer = $ReferencePanel/Content/Detail
+@onready var _reference_article: RichTextLabel = $ReferencePanel/Content/Detail/Article
 @onready var _robot: SorterRobot = $Layout/Field/Viewport/World/Robot
 
 
@@ -35,6 +57,36 @@ func _ready() -> void:
 	drag_area.mouse_exited.connect(drag_area.queue_redraw)
 	_layout.drag_ended.connect(_save_editor_width, CONNECT_DEFERRED)
 	_restore_editor_width.call_deferred()
+
+	$ReferencePanel/Content/Sections/Movement.pressed.connect(
+			_open_reference.bind(MOVEMENT_REFERENCE)
+	)
+	$ReferencePanel/Content/Sections/Cargo.pressed.connect(_open_reference.bind(CARGO_REFERENCE))
+	$ReferencePanel/Content/Sections/Output.pressed.connect(_open_reference.bind(OUTPUT_REFERENCE))
+	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
+
+
+func _open_reference(article: String) -> void:
+	_reference_article.text = article
+	_reference_article.scroll_to_line(0)
+	await _animate_reference(true)
+	_reference_detail.show()
+
+
+func _close_reference() -> void:
+	await _animate_reference(false)
+	_reference_sections.show()
+
+
+func _animate_reference(expanded: bool) -> void:
+	_reference_sections.hide()
+	_reference_detail.hide()
+	var top_anchor := 0.0 if expanded else 1.0
+	var top_offset := REFERENCE_EXPANDED_TOP if expanded else _reference_compact_top
+	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_reference_panel, "anchor_top", top_anchor, REFERENCE_ANIMATION_DURATION)
+	tween.tween_property(_reference_panel, "offset_top", top_offset, REFERENCE_ANIMATION_DURATION)
+	await tween.finished
 
 
 func _draw_editor_divider(drag_area: Control) -> void:
