@@ -391,17 +391,33 @@ func _test_scene() -> void:
 		await process_frame
 	robot.cell = Vector2i(1, 3)
 	robot.position = Vector3(1, 0, 3)
-	code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nput()\nprint('Готово')"
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var delivery_cells: Array[Vector2i] = []
+	field.cargo_delivered.connect(func() -> void: delivery_cells.append(robot.cell))
+	code.text = (
+			"move('up')\ngrab()\nmove('right')\nmove('right')\nput()\n"
+			+ "move('left')\nmove('left')\ngrab()\nmove('right')\nmove('right')\nput()\n"
+			+ "print('Готово')"
+	)
 	button.pressed.emit()
 	while not stop.disabled:
 		await process_frame
-	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	_expect(
+			delivery_cells == [SorterField.ZONE_CELL, SorterField.ZONE_CELL],
+			"Одна программа выполняет две доставки, робот остаётся в зоне"
+	)
 	_expect(field.delivered and not field.carrying, "Доставка засчитана после put")
 	_expect(game.get_node("Goal").text == "Коробка доставлена", "Успех виден игроку")
 	_expect(messages.get_parsed_text() == "Готово\n", "После доставки программа продолжается")
+	code.text = "print('Новый запуск')"
+	await process_frame
+	_expect(
+			stop.disabled and messages.get_parsed_text() == "Готово\n",
+			"Редактирование не запускает программу снова"
+	)
 	code.text = "grab()"
 	button.pressed.emit()
-	_expect(messages.get_parsed_text().contains("нет коробки"), "Доставленную коробку нельзя взять снова")
+	_expect(messages.get_parsed_text().contains("нет коробки"), "Новый груз не в зоне доставки")
 	code.text = "print('До')\nmove('north')\nprint('После')"
 	step.pressed.emit()
 	await create_timer(0.4).timeout

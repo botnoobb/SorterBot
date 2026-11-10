@@ -5,8 +5,10 @@ signal cargo_delivered()
 
 const CARGO_CELL := Vector2i(1, 2)
 const ZONE_CELL := Vector2i(3, 2)
+const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.3, CARGO_CELL.y)
 
 var carrying: bool = false
+# Результат доставки сохраняется до захвата следующей коробки.
 var delivered: bool = false
 var _cargo: MeshInstance3D
 var _robot_spawn_cell: Vector2i
@@ -22,7 +24,7 @@ func _ready() -> void:
 			_box(Vector3(x, -0.08, y), Vector3(0.96, 0.1, 0.96), Color(0.2, 0.25, 0.3))
 	_box(Vector3(CARGO_CELL.x, 0, CARGO_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.5, 0.9))
 	_box(Vector3(ZONE_CELL.x, 0, ZONE_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.8, 0.4))
-	_cargo = _box(Vector3(CARGO_CELL.x + 0.4, 0.3, CARGO_CELL.y), Vector3(0.45, 0.5, 0.45), Color(0.95, 0.65, 0.2))
+	_cargo = _box(CARGO_POSITION, Vector3(0.45, 0.5, 0.45), Color(0.95, 0.65, 0.2))
 	for item: Array in [["Выдача", Vector3(1, 0.1, 1.5)], ["Зона доставки", Vector3(3, 0.1, 1.5)]]:
 		var label := Label3D.new()
 		label.text = item[0]
@@ -38,7 +40,7 @@ func reset_current_cargo() -> void:
 	if not delivered:
 		if _cargo.get_parent() != self:
 			_cargo.reparent(self)
-		_cargo.position = Vector3(CARGO_CELL.x + 0.4, 0.3, CARGO_CELL.y)
+		_cargo.position = CARGO_POSITION
 		carrying = false
 
 
@@ -52,7 +54,7 @@ func perform(command: ProgramCommand, duration: float) -> String:
 	if command.type == ProgramCommand.Type.GRAB:
 		if carrying:
 			return "Робот уже несёт коробку."
-		if delivered or _robot.cell != CARGO_CELL:
+		if _robot.cell != CARGO_CELL:
 			return "На этой клетке нет коробки."
 	elif command.type == ProgramCommand.Type.PUT:
 		if not carrying:
@@ -68,8 +70,9 @@ func perform(command: ProgramCommand, duration: float) -> String:
 	tween.tween_property(_cargo, "position", target_position, duration)
 	await tween.finished
 	carrying = grabbing
+	delivered = not grabbing
 	if not grabbing:
-		delivered = true
+		_cargo.position = CARGO_POSITION
 		cargo_delivered.emit()
 	return ""
 
