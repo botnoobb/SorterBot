@@ -1,7 +1,9 @@
 extends RefCounted
 class_name Token
 
-enum Type { IDENTIFIER, STRING, LEFT_PAREN, RIGHT_PAREN, COMMA, EQUALS, NEWLINE, END }
+enum Type {
+	IDENTIFIER, STRING, LEFT_PAREN, RIGHT_PAREN, COMMA, EQUALS, EQUAL_EQUAL, COLON, NEWLINE, END,
+}
 
 var type: Type
 var text: String

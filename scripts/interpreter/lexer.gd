@@ -24,7 +24,13 @@ func tokenize(source: String) -> Array[Token]:
 		elif character == ",":
 			tokens.append(Token.new(Token.Type.COMMA, character, line, column))
 		elif character == "=":
-			tokens.append(Token.new(Token.Type.EQUALS, character, line, column))
+			if position + 1 < text.length() and text[position + 1] == "=":
+				tokens.append(Token.new(Token.Type.EQUAL_EQUAL, "==", line, column))
+				position += 1
+			else:
+				tokens.append(Token.new(Token.Type.EQUALS, character, line, column))
+		elif character == ":":
+			tokens.append(Token.new(Token.Type.COLON, character, line, column))
 		elif character == "(" or character == ")":
 			var type: Token.Type = Token.Type.LEFT_PAREN
 			if character == ")":

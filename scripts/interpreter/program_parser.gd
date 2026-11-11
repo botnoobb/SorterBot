@@ -19,13 +19,33 @@ func parse(source: String) -> Array[ProgramCommand]:
 		error = lexer.error
 		return []
 	var commands: Array[ProgramCommand] = []
-	var index: int = 0
+	_parse_block(source, tokens, 0, 0, commands)
+	if error != null:
+		return []
+	return commands
+
+
+func _parse_block(
+		source: String, tokens: Array[Token], index: int, column: int,
+		commands: Array[ProgramCommand]
+) -> int:
 	while tokens[index].type != Token.Type.END:
 		if tokens[index].type == Token.Type.NEWLINE:
 			index += 1
 			continue
 		var name: Token = tokens[index]
+		if column > 0 and name.column < column:
+			break
+		if column > 0 and name.column > column:
+			return _fail(source, name, "unexpected indent")
 		if name.type != Token.Type.IDENTIFIER:
+			return _fail(source, name)
+		if name.text == "if":
+			index = _parse_if(source, tokens, index, commands)
+			if error != null:
+				return index
+			continue
+		if name.text == "else":
 			return _fail(source, name)
 		index += 1
 		var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
@@ -34,7 +54,7 @@ func parse(source: String) -> Array[ProgramCommand]:
 			command.target_variable = name.text
 			index = _parse_operand(source, tokens, index + 1, command)
 			if error != null:
-				return []
+				return index
 			if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 				return _fail(source, tokens[index])
 			commands.append(command)
@@ -52,7 +72,7 @@ func parse(source: String) -> Array[ProgramCommand]:
 			if name.text == "print":
 				index = _parse_operand(source, tokens, index, command)
 				if error != null:
-					return []
+					return index
 			elif argument.type == Token.Type.STRING:
 				index += 1
 			else:
@@ -68,7 +88,58 @@ func parse(source: String) -> Array[ProgramCommand]:
 			return _fail(source, tokens[index])
 		_configure_call(source, name, arguments, command)
 		commands.append(command)
-	return commands
+	return index
+
+
+func _parse_if(
+		source: String, tokens: Array[Token], index: int, commands: Array[ProgramCommand]
+) -> int:
+	var keyword := tokens[index]
+	var condition := ProgramCommand.new(ProgramCommand.Type.IF, keyword.line)
+	index = _parse_operand(source, tokens, index + 1, condition)
+	if error != null:
+		return index
+	if tokens[index].type != Token.Type.EQUAL_EQUAL:
+		return _fail(source, tokens[index], "expected '=='")
+	condition.right_operand = ProgramCommand.new(ProgramCommand.Type.INVALID, keyword.line)
+	index = _parse_operand(source, tokens, index + 1, condition.right_operand)
+	if error != null:
+		return index
+	commands.append(condition)
+	index = _parse_branch(source, tokens, index, keyword.column, commands)
+	if error != null:
+		return index
+	var next := tokens[index]
+	if next.type == Token.Type.IDENTIFIER and next.text == "else" and next.column == keyword.column:
+		var skip_else := ProgramCommand.new(ProgramCommand.Type.JUMP, next.line)
+		commands.append(skip_else)
+		condition.jump_index = commands.size()
+		index = _parse_branch(source, tokens, index + 1, keyword.column, commands)
+		skip_else.jump_index = commands.size()
+	else:
+		condition.jump_index = commands.size()
+	return index
+
+
+func _parse_branch(
+		source: String, tokens: Array[Token], index: int, parent_column: int,
+		commands: Array[ProgramCommand]
+) -> int:
+	if tokens[index].type != Token.Type.COLON:
+		return _fail(source, tokens[index], "expected ':'")
+	index += 1
+	if tokens[index].type != Token.Type.NEWLINE:
+		return _fail(source, tokens[index], "expected an indented block")
+	while tokens[index].type == Token.Type.NEWLINE:
+		index += 1
+	var first := tokens[index]
+	if first.type == Token.Type.END or first.column <= parent_column:
+		return _fail(source, first, "expected an indented block")
+	index = _parse_block(source, tokens, index, first.column, commands)
+	if error == null and tokens[index].type != Token.Type.END:
+		if tokens[index].column > parent_column:
+			return _fail(source, tokens[index], "unindent does not match an outer indentation level")
+	return index
 
 
 func _configure_call(
@@ -115,7 +186,7 @@ func _parse_operand(
 		command.operand_kind = ProgramCommand.OperandKind.VARIABLE
 		command.operand_column = value.column
 		command.program_source = source
-		if value.text == "box_color" and tokens[index + 1].type == Token.Type.LEFT_PAREN:
+		if value.text == "get_box_color" and tokens[index + 1].type == Token.Type.LEFT_PAREN:
 			var closing := tokens[index + 2]
 			if closing.type != Token.Type.RIGHT_PAREN:
 				error = ProgramDiagnostic.new(
@@ -129,6 +200,6 @@ func _parse_operand(
 
 func _fail(
 	source: String, token: Token, message: String = "invalid syntax"
-) -> Array[ProgramCommand]:
+) -> int:
 	error = ProgramDiagnostic.new("SyntaxError", message, source, token.line, token.column)
-	return []
+	return -1

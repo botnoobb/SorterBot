@@ -19,16 +19,26 @@ const CARGO_REFERENCE := (
 		"Работа с коробкой\n\ngrab() берёт коробку на клетке выдачи. "
 		+ "put() кладёт её в зоне доставки.\n\n"
 		+ 'Пример со старта:\nmove("up")\ngrab()\n'
-		+ 'move("right")\nmove("right")\nput()'
+		+ 'move("right")\nmove("right")\nput()\n\n'
+		+ 'Для коробки blue добавьте move("down") перед put().'
 )
 const OUTPUT_REFERENCE := (
 		"Вывод\n\nprint() выводит текст. Пишите текст в кавычках, а имя переменной без них.\n\n"
 		+ 'Пример:\nprint("Готово")\n\n'
-		+ 'Цвет коробки можно вывести напрямую:\nprint(box_color())\n\n'
+		+ 'Цвет коробки можно вывести напрямую:\nprint(get_box_color())\n\n'
 		+ "Переменные\n\nСохраните цвет коробки под именем color, чтобы использовать его позже. "
 		+ "saved = color копирует текущее значение. Новое присваивание меняет color, "
 		+ "а saved хранит прежнюю строку. Цвет самой коробки при этом не меняется.\n\n"
-		+ 'color = box_color()\nsaved = color\ncolor = "синяя"\nprint(saved)\nprint(color)'
+		+ 'color = get_box_color()\nsaved = color\ncolor = "blue"\nprint(saved)\nprint(color)'
+)
+const CONDITIONS_REFERENCE := (
+		"Условия\n\nДоставьте коробку в зону её цвета. "
+		+ 'if сравнивает color с "orange". Если значения совпадают, выполнится первый блок. '
+		+ "Иначе робот выполнит команды под else. Команды внутри ветвей пишутся с отступом.\n\n"
+		+ 'color = get_box_color()\nmove("up")\ngrab()\nmove("right")\nmove("right")\n'
+		+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()\n\n'
+		+ "Попробуйте обе коробки. В режиме «Шаг» строка if подсветится отдельно "
+		+ "перед первой командой выбранной ветви."
 )
 
 var _parser := ProgramParser.new()
@@ -75,6 +85,9 @@ func _ready() -> void:
 	)
 	$ReferencePanel/Content/Sections/Cargo.pressed.connect(_open_reference.bind(CARGO_REFERENCE))
 	$ReferencePanel/Content/Sections/Output.pressed.connect(_open_reference.bind(OUTPUT_REFERENCE))
+	$ReferencePanel/Content/Sections/Conditions.pressed.connect(
+			_open_reference.bind(CONDITIONS_REFERENCE)
+	)
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)

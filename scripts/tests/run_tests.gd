@@ -18,6 +18,7 @@ func _run() -> void:
 		quit(1 if _failures > 0 else 0)
 		return
 	await _test_variables()
+	await _test_conditions()
 	await _test_first_lesson()
 	_test_parser()
 	_test_print_parser()
@@ -32,6 +33,79 @@ func _run() -> void:
 	quit(1 if _failures > 0 else 0)
 
 
+func _test_conditions() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	var game: Control = packed.instantiate()
+	root.add_child(game)
+	await process_frame
+	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	var executor: ProgramExecutor = game.get("_executor")
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	var lines: Array[int] = []
+	executor.step_started.connect(func(line: int) -> void:
+		lines.append(line)
+		_expect(code.get_line_background_color(line - 1).a > 0, "Текущий шаг подсвечен")
+	)
+	code.text = (
+			'color = get_box_color()\nmove("up")\ngrab()\nmove("right")\nmove("right")\n'
+			+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()'
+	)
+	for single_step: bool in [false, true]:
+		for orange: bool in [true, false]:
+			reset.pressed.emit()
+			lines.clear()
+			var start: Button = step if single_step else run
+			start.pressed.emit()
+			var deadline := create_timer(8.0)
+			var condition_paused := false
+			while not stop.disabled and deadline.time_left > 0.0:
+				if single_step and not step.disabled:
+					if lines == [1, 2, 3, 4, 5, 6]:
+						condition_paused = field.carrying
+					step.pressed.emit()
+				await process_frame
+			if single_step:
+				_expect(condition_paused, "После проверки if есть пауза перед командой ветви")
+			var expected: Array[int] = [1, 2, 3, 4, 5, 6]
+			expected.append_array([7] if orange else [9, 10])
+			_expect(lines == expected, "После if выполняются только строки выбранной ветви")
+			var zone := Vector2i(3, 2) if orange else Vector2i(3, 3)
+			_expect(stop.disabled and field.delivered and robot.cell == zone,
+					"Коробка доставлена в зону своего цвета")
+	reset.pressed.emit()
+	code.text = 'move("up")\ngrab()\nmove("right")\nmove("right")\nmove("down")\nput()'
+	run.pressed.emit()
+	var deadline := create_timer(5.0)
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(executor.action_error == "Этой коробке нужна зона orange.",
+			"Зона другого цвета отклоняет доставку")
+	_expect(field.carrying and not field.delivered, "Ошибочная доставка не меняет текущий груз")
+	reset.pressed.emit()
+	_expect(field.get_box_color() == "orange", "Перезапуск груза сохраняет цвет")
+	code.text = 'if get_box_color() == "blue":\n    print("blue")\nprint("После if")'
+	lines.clear()
+	run.pressed.emit()
+	deadline = create_timer(3.0)
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(lines == [1, 3], "Ложное условие без else пропускает блок и продолжает программу")
+	var reference: Panel = game.get_node("ReferencePanel")
+	_click_reference_button(reference.get_node("Content/Sections/Conditions"))
+	await create_timer(0.4).timeout
+	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	_expect(article.is_visible_in_tree() and article.text.contains('if color == "orange":'),
+			"Учебный пример условий доступен в справке")
+	game.queue_free()
+	await process_frame
+
+
 func _test_variables() -> void:
 	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
 	var game: Control = packed.instantiate()
@@ -44,9 +118,9 @@ func _test_variables() -> void:
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
 	code.text = (
-			"color = box_color()\nsaved = color\n"
-			+ 'color = "синяя"\nprint(saved)\nprint(color)\n'
-			+ "move('up')\ngrab()\nprint(box_color())"
+			"color = get_box_color()\nsaved = color\n"
+			+ 'color = "blue"\nprint(saved)\nprint(color)\n'
+			+ "move('up')\ngrab()\nprint(get_box_color())"
 	)
 	step.pressed.emit()
 	var deadline := create_timer(8.0)
@@ -58,7 +132,7 @@ func _test_variables() -> void:
 		run.pressed.emit()
 	while not stop.disabled and deadline.time_left > 0.0:
 		await process_frame
-	_expect(output.get_parsed_text() == "оранжевая\nсиняя\nоранжевая\n",
+	_expect(output.get_parsed_text() == "orange\nblue\norange\n",
 			"Строковые переменные сохраняются между шагами и копируются по значению")
 	code.text = "print(color)"
 	run.pressed.emit()
@@ -96,6 +170,9 @@ func _test_parser() -> void:
 		"move('up'", "move('up\")", "move('up') move('down')",
 		"move('up');", "move('u\np')", "move(42)",
 		"move('up')\n@", "move('up')\nmove('bad'",
+		"if 'a' == 'a':\nprint('нет отступа')",
+		"if 'a' = 'a':\n    print('нет сравнения')",
+		"if 'a' == 'a':\n    print('ветвь')\n  print('неверный отступ')",
 	]:
 		commands = parser.parse(source)
 		_expect(not (parser.error == null), "Отклонён ввод: " + source)
@@ -133,9 +210,9 @@ func _test_print_parser() -> void:
 		_expect(commands[1].text.is_empty(), "Допустима пустая строка")
 	commands = parser.parse("print(42)")
 	_expect(commands.is_empty() and parser.error != null, "print не принимает число")
-	commands = parser.parse("print(box_color())")
-	_expect(commands.size() == 1 and parser.error == null, "В print допустим вызов box_color()")
-	for source: String in ["print(box_color(", "print(box_color()", "print(box_color('x'))"]:
+	commands = parser.parse("print(get_box_color())")
+	_expect(commands.size() == 1 and parser.error == null, "В print допустим вызов get_box_color()")
+	for source: String in ["print(get_box_color(", "print(get_box_color()", "print(get_box_color('x'))"]:
 		commands = parser.parse(source)
 		_expect(commands.is_empty() and parser.error != null, "Ошибочный вложенный вызов отклоняется")
 
@@ -625,14 +702,15 @@ func _test_scene() -> void:
 	field.cargo_delivered.connect(func() -> void: delivery_cells.append(robot.cell))
 	code.text = (
 			"move('up')\ngrab()\nmove('right')\nmove('right')\nput()\n"
-			+ "move('left')\nmove('left')\ngrab()\nmove('right')\nmove('right')\nput()\n"
+			+ "move('left')\nmove('left')\ngrab()\nmove('right')\nmove('right')\n"
+			+ "move('down')\nput()\n"
 			+ "print('Готово')"
 	)
 	button.pressed.emit()
 	while not stop.disabled:
 		await process_frame
 	_expect(
-			delivery_cells == [SorterField.ZONE_CELL, SorterField.ZONE_CELL],
+			delivery_cells == [SorterField.ZONE_CELL, Vector2i(3, 3)],
 			"Одна программа выполняет две доставки, робот остаётся в зоне"
 	)
 	_expect(field.delivered and not field.carrying, "Доставка засчитана после put")

@@ -150,6 +150,8 @@ move(\"right\")
 move(\"right\")
 put()
 
+Пример ведёт в зону orange. Если на выдаче синяя коробка, добавьте move(\"down\") перед put(), чтобы попасть в зону blue.
+
 Запустите её и нажмите «Стоп» (■) во время движения. Робот закончит текущую команду и остановится. Нажмите «Начать текущий груз заново». Выполните первую строку кнопкой «Шаг», дождитесь паузы и нажмите «Запустить». Робот продолжит со следующей строки и доставит коробку."
 
 [node name="ReferencePanel" type="Panel" parent="."]
@@ -158,7 +160,7 @@ layout_mode = 1
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = -200.0
+offset_top = -236.0
 offset_right = 244.0
 offset_bottom = -16.0
 theme = ExtResource("5")
@@ -207,6 +209,14 @@ size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Вывод"
+alignment = 0
+
+[node name="Conditions" type="Button" parent="ReferencePanel/Content/Sections"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ReferenceButton"
+focus_mode = 0
+text = "Условия"
 alignment = 0
 
 [node name="Detail" type="VBoxContainer" parent="ReferencePanel/Content"]

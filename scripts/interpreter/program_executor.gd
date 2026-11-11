@@ -31,15 +31,29 @@ func run(
 	is_paused = false
 	is_running = true
 	var variables: Dictionary[String, String] = {}
-	for index: int in range(commands.size()):
+	var index := 0
+	while index < commands.size():
 		var command: ProgramCommand = commands[index]
+		var next_index := index + 1
 		step_started.emit(command.line)
 		if command.error != null:
 			error = command.error
 			is_running = false
 			return false
 		# Следующая команда ждёт завершения движения робота.
-		if command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
+		if command.type == ProgramCommand.Type.IF:
+			var left := _read_expression(command, variables, read_box_color)
+			if error != null:
+				is_running = false
+				return false
+			var right := _read_expression(command.right_operand, variables, read_box_color)
+			if error != null:
+				is_running = false
+				return false
+			if left != right:
+				next_index = command.jump_index
+			await tree.create_timer(STEP_DURATION).timeout
+		elif command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
 			var value := _read_expression(command, variables, read_box_color)
 			if error != null:
 				is_running = false
@@ -59,7 +73,10 @@ func run(
 		else:
 			output_emitted.emit(command.text)
 			await tree.create_timer(STEP_DURATION).timeout
-		if _pause_requested and not _stop_requested and index + 1 < commands.size():
+		# Переход через невыбранную ветвь не является шагом программы.
+		while next_index < commands.size() and commands[next_index].type == ProgramCommand.Type.JUMP:
+			next_index = commands[next_index].jump_index
+		if _pause_requested and not _stop_requested and next_index < commands.size():
 			is_paused = true
 			pause_changed.emit(true)
 			while is_paused and not _stop_requested:
@@ -71,6 +88,7 @@ func run(
 			was_stopped = true
 			is_running = false
 			return false
+		index = next_index
 	is_running = false
 	return true
 
