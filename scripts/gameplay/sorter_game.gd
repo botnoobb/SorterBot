@@ -24,10 +24,11 @@ const CARGO_REFERENCE := (
 const OUTPUT_REFERENCE := (
 		"Вывод\n\nprint() выводит текст. Пишите текст в кавычках, а имя переменной без них.\n\n"
 		+ 'Пример:\nprint("Готово")\n\n'
+		+ 'Цвет коробки можно вывести напрямую:\nprint(box_color())\n\n'
 		+ "Переменные\n\nСохраните цвет коробки под именем color, чтобы использовать его позже. "
 		+ "saved = color копирует текущее значение. Новое присваивание меняет color, "
 		+ "а saved хранит прежнюю строку. Цвет самой коробки при этом не меняется.\n\n"
-		+ 'color = cargo_color()\nsaved = color\ncolor = "синяя"\nprint(saved)\nprint(color)'
+		+ 'color = box_color()\nsaved = color\ncolor = "синяя"\nprint(saved)\nprint(color)'
 )
 
 var _parser := ProgramParser.new()
@@ -78,6 +79,7 @@ func _ready() -> void:
 	_lesson_toggle.toggled.connect(_toggle_lesson)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)
 	_editor.resized.connect(_resize_lesson, CONNECT_DEFERRED)
+	_lesson.minimum_size_changed.connect(_fit_compact_lesson_height)
 	_lesson.resized.connect(_sync_reference_top)
 	_resize_lesson.call_deferred()
 
@@ -106,6 +108,11 @@ func _resize_lesson() -> void:
 			break
 		font_size -= 1
 	_lesson_title.add_theme_font_size_override("font_size", font_size)
+
+
+func _fit_compact_lesson_height() -> void:
+	if not _lesson_details.visible:
+		_lesson.size.y = _lesson.get_combined_minimum_size().y
 
 
 func _sync_reference_top() -> void:
@@ -239,7 +246,7 @@ func _start_program(source: String, single_step: bool = false) -> void:
 	_editor.set_running(true)
 	_editor.show_message("Программа выполняется…")
 	await _executor.run(
-			commands, _robot.move, get_tree(), single_step, _field.perform, _field.get_cargo_color
+			commands, _robot.move, get_tree(), single_step, _field.perform, _field.get_box_color
 	)
 	_editor.clear_execution_line()
 	_editor.set_running(false)

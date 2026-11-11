@@ -44,9 +44,9 @@ func _test_variables() -> void:
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
 	code.text = (
-			"color = cargo_color()\nsaved = color\n"
+			"color = box_color()\nsaved = color\n"
 			+ 'color = "синяя"\nprint(saved)\nprint(color)\n'
-			+ "move('up')\ngrab()\ncolor = cargo_color()\nprint(color)"
+			+ "move('up')\ngrab()\nprint(box_color())"
 	)
 	step.pressed.emit()
 	var deadline := create_timer(8.0)
@@ -133,6 +133,11 @@ func _test_print_parser() -> void:
 		_expect(commands[1].text.is_empty(), "Допустима пустая строка")
 	commands = parser.parse("print(42)")
 	_expect(commands.is_empty() and parser.error != null, "print не принимает число")
+	commands = parser.parse("print(box_color())")
+	_expect(commands.size() == 1 and parser.error == null, "В print допустим вызов box_color()")
+	for source: String in ["print(box_color(", "print(box_color()", "print(box_color('x'))"]:
+		commands = parser.parse(source)
+		_expect(commands.is_empty() and parser.error != null, "Ошибочный вложенный вызов отклоняется")
 
 
 func _record_step(line: int) -> void:
@@ -210,6 +215,8 @@ func _test_first_lesson() -> void:
 	var field: Control = game.get_node("Layout/Field")
 	var field_rect := field.get_global_rect()
 	_expect(not details.visible and not toggle.button_pressed, "Задание изначально свёрнуто")
+	_expect(is_equal_approx(lesson.size.y, lesson.get_combined_minimum_size().y),
+			"При запуске свёрнутая карточка занимает только высоту своего содержимого")
 	_click_reference_button(toggle)
 	await process_frame
 	_expect(details.visible and details.text.contains('move("up")'), "В уроке есть первая команда")
@@ -218,6 +225,8 @@ func _test_first_lesson() -> void:
 	_click_reference_button(toggle)
 	await process_frame
 	_expect(not details.visible and not toggle.button_pressed, "Шеврон сворачивает задание")
+	_expect(is_equal_approx(lesson.size.y, lesson.get_combined_minimum_size().y),
+			"После сворачивания карточка возвращается к высоте своего содержимого")
 	_click_reference_button(toggle)
 	await process_frame
 	_expect(details.visible, "Урок можно открыть снова")

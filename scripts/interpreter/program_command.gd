@@ -2,7 +2,7 @@ extends RefCounted
 class_name ProgramCommand
 
 enum Type { MOVE, PRINT, GRAB, PUT, INVALID, ASSIGN }
-enum OperandKind { LITERAL, VARIABLE, CARGO_COLOR }
+enum OperandKind { LITERAL, VARIABLE, BOX_COLOR }
 
 var type: Type
 var line: int

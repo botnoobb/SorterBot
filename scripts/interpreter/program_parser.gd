@@ -28,25 +28,16 @@ func parse(source: String) -> Array[ProgramCommand]:
 		if name.type != Token.Type.IDENTIFIER:
 			return _fail(source, name)
 		index += 1
+		var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
 		if tokens[index].type == Token.Type.EQUALS:
-			index += 1
-			var value: Token = tokens[index]
-			if value.type not in [Token.Type.STRING, Token.Type.IDENTIFIER]:
-				return _fail(source, value)
-			index += 1
-			var assignment := ProgramCommand.new(ProgramCommand.Type.ASSIGN, name.line)
-			assignment.target_variable = name.text
-			_set_expression(assignment, value, source)
-			if value.type == Token.Type.IDENTIFIER and value.text == "cargo_color":
-				if tokens[index].type == Token.Type.LEFT_PAREN:
-					index += 1
-					if tokens[index].type != Token.Type.RIGHT_PAREN:
-						return _fail(source, tokens[index])
-					index += 1
-					assignment.operand_kind = ProgramCommand.OperandKind.CARGO_COLOR
+			command.type = ProgramCommand.Type.ASSIGN
+			command.target_variable = name.text
+			index = _parse_operand(source, tokens, index + 1, command)
+			if error != null:
+				return []
 			if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 				return _fail(source, tokens[index])
-			commands.append(assignment)
+			commands.append(command)
 			continue
 		var opening: Token = tokens[index]
 		if opening.type != Token.Type.LEFT_PAREN:
@@ -57,13 +48,15 @@ func parse(source: String) -> Array[ProgramCommand]:
 			if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
 				return _fail(source, opening, "'(' was never closed")
 			var argument: Token = tokens[index]
-			var variable_argument := (
-					name.text == "print" and argument.type == Token.Type.IDENTIFIER
-			)
-			if argument.type != Token.Type.STRING and not variable_argument:
-				return _fail(source, tokens[index])
 			arguments.append(argument)
-			index += 1
+			if name.text == "print":
+				index = _parse_operand(source, tokens, index, command)
+				if error != null:
+					return []
+			elif argument.type == Token.Type.STRING:
+				index += 1
+			else:
+				return _fail(source, argument)
 			if tokens[index].type == Token.Type.COMMA:
 				index += 1
 			elif tokens[index].type != Token.Type.RIGHT_PAREN:
@@ -73,12 +66,14 @@ func parse(source: String) -> Array[ProgramCommand]:
 		index += 1
 		if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 			return _fail(source, tokens[index])
-		commands.append(_make_command(source, name, arguments))
+		_configure_call(source, name, arguments, command)
+		commands.append(command)
 	return commands
 
 
-func _make_command(source: String, name: Token, arguments: Array[Token]) -> ProgramCommand:
-	var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
+func _configure_call(
+		source: String, name: Token, arguments: Array[Token], command: ProgramCommand
+) -> void:
 	var error_type: String = ""
 	var message: String = ""
 	if name.text not in ["move", "print", "grab", "put"]:
@@ -100,21 +95,36 @@ func _make_command(source: String, name: Token, arguments: Array[Token]) -> Prog
 			command.type = ProgramCommand.Type.PUT
 		else:
 			command.type = ProgramCommand.Type.PRINT
-			_set_expression(command, arguments[0], source)
-		return command
+		return
 	# Диагностика сохраняется в команде и возникает только при её выполнении.
 	command.error = ProgramDiagnostic.new(
 		error_type, message, source, name.line, name.column, true
 	)
-	return command
 
 
-func _set_expression(command: ProgramCommand, value: Token, source: String) -> void:
+func _parse_operand(
+		source: String, tokens: Array[Token], index: int, command: ProgramCommand
+) -> int:
+	var value := tokens[index]
+	if value.type not in [Token.Type.STRING, Token.Type.IDENTIFIER]:
+		error = ProgramDiagnostic.new("SyntaxError", "invalid syntax", source, value.line, value.column)
+		return index
 	command.text = value.text
+	command.operand_kind = ProgramCommand.OperandKind.LITERAL
 	if value.type == Token.Type.IDENTIFIER:
 		command.operand_kind = ProgramCommand.OperandKind.VARIABLE
 		command.operand_column = value.column
 		command.program_source = source
+		if value.text == "box_color" and tokens[index + 1].type == Token.Type.LEFT_PAREN:
+			var closing := tokens[index + 2]
+			if closing.type != Token.Type.RIGHT_PAREN:
+				error = ProgramDiagnostic.new(
+						"SyntaxError", "expected ')'", source, closing.line, closing.column
+				)
+				return index
+			command.operand_kind = ProgramCommand.OperandKind.BOX_COLOR
+			return index + 3
+	return index + 1
 
 
 func _fail(

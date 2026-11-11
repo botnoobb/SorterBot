@@ -19,7 +19,7 @@ var action_error: String = ""
 func run(
 		commands: Array[ProgramCommand], move_action: Callable, tree: SceneTree,
 		single_step: bool = false, game_action: Callable = Callable(),
-		read_cargo_color: Callable = Callable()
+		read_box_color: Callable = Callable()
 ) -> bool:
 	if is_running:
 		return false
@@ -40,7 +40,7 @@ func run(
 			return false
 		# Следующая команда ждёт завершения движения робота.
 		if command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
-			var value := _read_expression(command, variables, read_cargo_color)
+			var value := _read_expression(command, variables, read_box_color)
 			if error != null:
 				is_running = false
 				return false
@@ -93,7 +93,7 @@ func resume(single_step: bool = false) -> void:
 
 
 func _read_expression(
-		command: ProgramCommand, variables: Dictionary[String, String], read_cargo_color: Callable
+		command: ProgramCommand, variables: Dictionary[String, String], read_box_color: Callable
 ) -> String:
 	match command.operand_kind:
 		ProgramCommand.OperandKind.LITERAL:
@@ -105,11 +105,11 @@ func _read_expression(
 					"NameError", "name '%s' is not defined" % command.text,
 					command.program_source, command.line, command.operand_column, true
 			)
-		ProgramCommand.OperandKind.CARGO_COLOR:
-			if read_cargo_color.is_valid():
-				return read_cargo_color.call()
+		ProgramCommand.OperandKind.BOX_COLOR:
+			if read_box_color.is_valid():
+				return read_box_color.call()
 			error = ProgramDiagnostic.new(
-					"RuntimeError", "cargo color is unavailable",
+					"RuntimeError", "box color is unavailable",
 					command.program_source, command.line, command.operand_column, true
 			)
 	return ""
