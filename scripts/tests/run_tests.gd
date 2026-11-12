@@ -18,6 +18,7 @@ func _run() -> void:
 		quit(1 if _failures > 0 else 0)
 		return
 	await _test_variables()
+	await _test_while()
 	await _test_conditions()
 	await _test_first_lesson()
 	_test_parser()
@@ -31,6 +32,94 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_while() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	var game: Control = packed.instantiate()
+	root.add_child(game)
+	await process_frame
+	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var run: Button = content.get_node("Header/Run")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	var executor: ProgramExecutor = game.get("_executor")
+	var lines: Array[int] = []
+	executor.step_started.connect(func(line: int) -> void:
+		lines.append(line)
+		_expect(code.get_line_background_color(line - 1).a > 0, "Строка цикла подсвечена")
+	)
+	code.text = (
+			'state = "repeat"\nwhile state == "repeat":\n'
+			+ '    state = "done"\nprint(state)\nwhile False:\n    pass'
+	)
+	for single_step: bool in [false, true]:
+		lines.clear()
+		var pauses: Array[int] = []
+		var start: Button = step if single_step else run
+		start.pressed.emit()
+		var deadline := create_timer(5.0)
+		while not stop.disabled and deadline.time_left > 0.0:
+			if single_step and not step.disabled:
+				pauses.append(lines.back())
+				step.pressed.emit()
+			await process_frame
+		_expect(stop.disabled and lines == [1, 2, 3, 2, 4, 5], "Цикл повторно проверяет условие")
+		_expect(output.get_parsed_text() == "done\n", "После выхода доступно значение из цикла")
+		if single_step:
+			_expect(pauses == [1, 2, 3, 2, 4], "Каждая проверка while занимает отдельный шаг")
+
+	code.text = "while True:\n    pass"
+	lines.clear()
+	run.pressed.emit()
+	var deadline := create_timer(4.0)
+	while not stop.disabled and lines.size() < 3 and deadline.time_left > 0.0:
+		await process_frame
+	_expect(lines == [1, 2, 1], "pass возвращает управление к условию while")
+	stop.pressed.emit()
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(stop.disabled and executor.was_stopped, "Стоп прерывает цикл без движений")
+	step.pressed.emit()
+	deadline = create_timer(4.0)
+	while step.disabled and not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(executor.is_paused, "Цикл с pass можно приостановить пошаговым запуском")
+	stop.pressed.emit()
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(stop.disabled and executor.was_stopped, "Стоп работает и в паузе цикла")
+
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	var zones: Array[Vector2i] = []
+	field.cargo_delivered.connect(func() -> void:
+		zones.append(robot.cell)
+		if zones.size() == 2:
+			stop.pressed.emit()
+	)
+	code.text = (
+			'move("up")\nwhile True:\n    color = get_box_color()\n    grab()\n'
+			+ '    move("right")\n    move("right")\n    if color == "orange":\n'
+			+ '        put()\n    else:\n        move("down")\n        put()\n'
+			+ '        move("up")\n    move("left")\n    move("left")'
+	)
+	run.pressed.emit()
+	deadline = create_timer(12.0)
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(stop.disabled and zones == [SorterField.ZONE_CELL, SorterField.BLUE_ZONE_CELL],
+			"Один запуск while доставляет две коробки в разные зоны")
+	var reference: Panel = game.get_node("ReferencePanel")
+	_click_reference_button(reference.get_node("Content/Sections/While"))
+	await create_timer(0.4).timeout
+	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	_expect(article.is_visible_in_tree() and article.text.contains(code.text),
+			"В справке показана проверенная программа повторной доставки")
+	game.queue_free()
+	await process_frame
 
 
 func _test_conditions() -> void:
@@ -173,6 +262,8 @@ func _test_parser() -> void:
 		"if 'a' == 'a':\nprint('нет отступа')",
 		"if 'a' = 'a':\n    print('нет сравнения')",
 		"if 'a' == 'a':\n    print('ветвь')\n  print('неверный отступ')",
+		"while True:\npass", "while False\n    pass", "while True:\n    pass()",
+		"True = 'repeat'", "while 'repeat' == False:\n    pass",
 	]:
 		commands = parser.parse(source)
 		_expect(not (parser.error == null), "Отклонён ввод: " + source)

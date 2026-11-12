@@ -41,17 +41,15 @@ func run(
 			is_running = false
 			return false
 		# Следующая команда ждёт завершения движения робота.
-		if command.type == ProgramCommand.Type.IF:
-			var left := _read_expression(command, variables, read_box_color)
+		if command.type == ProgramCommand.Type.CONDITION:
+			var matches := _condition_matches(command, variables, read_box_color)
 			if error != null:
 				is_running = false
 				return false
-			var right := _read_expression(command.right_operand, variables, read_box_color)
-			if error != null:
-				is_running = false
-				return false
-			if left != right:
+			if not matches:
 				next_index = command.jump_index
+			await tree.create_timer(STEP_DURATION).timeout
+		elif command.type == ProgramCommand.Type.PASS:
 			await tree.create_timer(STEP_DURATION).timeout
 		elif command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
 			var value := _read_expression(command, variables, read_box_color)
@@ -73,7 +71,7 @@ func run(
 		else:
 			output_emitted.emit(command.text)
 			await tree.create_timer(STEP_DURATION).timeout
-		# Переход через невыбранную ветвь не является шагом программы.
+		# Переходы между командами не являются отдельными шагами.
 		while next_index < commands.size() and commands[next_index].type == ProgramCommand.Type.JUMP:
 			next_index = commands[next_index].jump_index
 		if _pause_requested and not _stop_requested and next_index < commands.size():
@@ -108,6 +106,18 @@ func resume(single_step: bool = false) -> void:
 		_pause_requested = single_step
 		is_paused = false
 		pause_changed.emit(false)
+
+
+func _condition_matches(
+		command: ProgramCommand, variables: Dictionary[String, String], read_box_color: Callable
+) -> bool:
+	if command.right_operand == null:
+		return command.constant_condition
+	var left := _read_expression(command, variables, read_box_color)
+	if error != null:
+		return false
+	var right := _read_expression(command.right_operand, variables, read_box_color)
+	return left == right
 
 
 func _read_expression(

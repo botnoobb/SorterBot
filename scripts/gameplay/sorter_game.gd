@@ -40,6 +40,18 @@ const CONDITIONS_REFERENCE := (
 		+ "Попробуйте обе коробки. В режиме «Шаг» строка if подсветится отдельно "
 		+ "перед первой командой выбранной ветви."
 )
+const WHILE_REFERENCE := (
+		"Цикл while\n\nДоставьте две коробки одним запуском. Цикл повторяет доставку "
+		+ "и возвращает робота на выдачу. После второй доставки нажмите «Стоп».\n\n"
+		+ 'move("up")\nwhile True:\n    color = get_box_color()\n    grab()\n'
+		+ '    move("right")\n    move("right")\n    if color == "orange":\n'
+		+ '        put()\n    else:\n        move("down")\n        put()\n'
+		+ '        move("up")\n    move("left")\n    move("left")\n\n'
+		+ 'Условие проверяется перед каждым повтором. Сравнение вроде state == "repeat" '
+		+ "позволяет выйти из цикла, когда значение изменится.\n\n"
+		+ "Попробуйте while True с командой pass внутри. Робот не двигается, "
+		+ "но «Стоп» всё равно завершает выполнение."
+)
 
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
@@ -88,6 +100,7 @@ func _ready() -> void:
 	$ReferencePanel/Content/Sections/Conditions.pressed.connect(
 			_open_reference.bind(CONDITIONS_REFERENCE)
 	)
+	$ReferencePanel/Content/Sections/While.pressed.connect(_open_reference.bind(WHILE_REFERENCE))
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)

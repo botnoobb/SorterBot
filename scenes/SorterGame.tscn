@@ -160,7 +160,7 @@ layout_mode = 1
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = -236.0
+offset_top = -272.0
 offset_right = 244.0
 offset_bottom = -16.0
 theme = ExtResource("5")
@@ -217,6 +217,14 @@ size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Условия"
+alignment = 0
+
+[node name="While" type="Button" parent="ReferencePanel/Content/Sections"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"ReferenceButton"
+focus_mode = 0
+text = "Цикл while"
 alignment = 0
 
 [node name="Detail" type="VBoxContainer" parent="ReferencePanel/Content"]

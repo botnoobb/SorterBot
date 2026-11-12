@@ -40,15 +40,21 @@ func _parse_block(
 			return _fail(source, name, "unexpected indent")
 		if name.type != Token.Type.IDENTIFIER:
 			return _fail(source, name)
-		if name.text == "if":
-			index = _parse_if(source, tokens, index, commands)
+		if name.text in ["if", "while"]:
+			index = _parse_control(source, tokens, index, commands)
 			if error != null:
 				return index
 			continue
-		if name.text == "else":
+		if name.text in ["else", "True", "False"]:
 			return _fail(source, name)
 		index += 1
 		var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
+		if name.text == "pass":
+			if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
+				return _fail(source, tokens[index])
+			command.type = ProgramCommand.Type.PASS
+			commands.append(command)
+			continue
 		if tokens[index].type == Token.Type.EQUALS:
 			command.type = ProgramCommand.Type.ASSIGN
 			command.target_variable = name.text
@@ -91,37 +97,54 @@ func _parse_block(
 	return index
 
 
-func _parse_if(
+func _parse_control(
 		source: String, tokens: Array[Token], index: int, commands: Array[ProgramCommand]
 ) -> int:
 	var keyword := tokens[index]
-	var condition := ProgramCommand.new(ProgramCommand.Type.IF, keyword.line)
-	index = _parse_operand(source, tokens, index + 1, condition)
-	if error != null:
-		return index
-	if tokens[index].type != Token.Type.EQUAL_EQUAL:
-		return _fail(source, tokens[index], "expected '=='")
-	condition.right_operand = ProgramCommand.new(ProgramCommand.Type.INVALID, keyword.line)
-	index = _parse_operand(source, tokens, index + 1, condition.right_operand)
+	var condition_index := commands.size()
+	var condition := ProgramCommand.new(ProgramCommand.Type.CONDITION, keyword.line)
+	index = _parse_condition(source, tokens, index + 1, condition, keyword.text == "while")
 	if error != null:
 		return index
 	commands.append(condition)
-	index = _parse_branch(source, tokens, index, keyword.column, commands)
+	index = _parse_indented_block(source, tokens, index, keyword.column, commands)
 	if error != null:
 		return index
 	var next := tokens[index]
-	if next.type == Token.Type.IDENTIFIER and next.text == "else" and next.column == keyword.column:
+	if keyword.text == "while":
+		var repeat := ProgramCommand.new(ProgramCommand.Type.JUMP, keyword.line)
+		repeat.jump_index = condition_index
+		commands.append(repeat)
+		condition.jump_index = commands.size()
+	elif next.type == Token.Type.IDENTIFIER and next.text == "else" and next.column == keyword.column:
 		var skip_else := ProgramCommand.new(ProgramCommand.Type.JUMP, next.line)
 		commands.append(skip_else)
 		condition.jump_index = commands.size()
-		index = _parse_branch(source, tokens, index + 1, keyword.column, commands)
+		index = _parse_indented_block(source, tokens, index + 1, keyword.column, commands)
 		skip_else.jump_index = commands.size()
 	else:
 		condition.jump_index = commands.size()
 	return index
 
 
-func _parse_branch(
+func _parse_condition(
+		source: String, tokens: Array[Token], index: int, condition: ProgramCommand,
+		allow_boolean: bool
+) -> int:
+	var value := tokens[index]
+	if allow_boolean and value.type == Token.Type.IDENTIFIER and value.text in ["True", "False"]:
+		condition.constant_condition = value.text == "True"
+		return index + 1
+	index = _parse_operand(source, tokens, index, condition)
+	if error != null:
+		return index
+	if tokens[index].type != Token.Type.EQUAL_EQUAL:
+		return _fail(source, tokens[index], "expected '=='")
+	condition.right_operand = ProgramCommand.new(ProgramCommand.Type.INVALID, condition.line)
+	return _parse_operand(source, tokens, index + 1, condition.right_operand)
+
+
+func _parse_indented_block(
 		source: String, tokens: Array[Token], index: int, parent_column: int,
 		commands: Array[ProgramCommand]
 ) -> int:
@@ -177,7 +200,8 @@ func _parse_operand(
 		source: String, tokens: Array[Token], index: int, command: ProgramCommand
 ) -> int:
 	var value := tokens[index]
-	if value.type not in [Token.Type.STRING, Token.Type.IDENTIFIER]:
+	var reserved := value.type == Token.Type.IDENTIFIER and value.text in ["True", "False"]
+	if reserved or value.type not in [Token.Type.STRING, Token.Type.IDENTIFIER]:
 		error = ProgramDiagnostic.new("SyntaxError", "invalid syntax", source, value.line, value.column)
 		return index
 	command.text = value.text
