@@ -75,16 +75,26 @@ func run(
 				or command.type == ProgramCommand.Type.CALL_FUNCTION
 		):
 			var name := command.function_name
+			var definition_index: int = functions.get(name, -1)
+			var parameter_count := 0
+			if definition_index >= 0:
+				parameter_count = commands[definition_index].parameters.size()
 			error = _check_function_call(
-					command, functions.get(name, -1), variables, local_names, call_stack
+					command, definition_index, parameter_count, variables, local_names, call_stack
 			)
 			if error != null:
 				is_running = false
 				return false
-			var definition_index := functions[name]
+			var definition := commands[definition_index]
 			var scope := globals.duplicate()
-			for local_name: String in commands[definition_index].local_names:
+			for local_name: String in definition.local_names:
 				scope.erase(local_name)
+			for argument_index: int in command.arguments.size():
+				var value := _read_expression(command.arguments[argument_index], variables, read_box_color)
+				if error != null:
+					is_running = false
+					return false
+				scope[definition.parameters[argument_index]] = value
 			call_stack.append({
 				"variables": scope,
 				"definition_index": definition_index,
@@ -108,7 +118,8 @@ func run(
 		elif command.type == ProgramCommand.Type.PASS:
 			await tree.create_timer(STEP_DURATION).timeout
 		elif command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
-			var value := _read_expression(command, variables, read_box_color)
+			var operand := command.arguments[0] if command.type == ProgramCommand.Type.PRINT else command
+			var value := _read_expression(operand, variables, read_box_color)
 			if error != null:
 				is_running = false
 				return false
@@ -119,16 +130,27 @@ func run(
 			else:
 				output_emitted.emit(value)
 			await tree.create_timer(STEP_DURATION).timeout
-		elif game_action.is_valid():
-			action_error = await game_action.call(command, STEP_DURATION)
-			if not action_error.is_empty():
-				is_running = false
-				return false
 		elif command.type == ProgramCommand.Type.MOVE:
-			await move_action.call(command.direction, STEP_DURATION)
+			var movement := command
+			if not command.arguments.is_empty() and command.direction == Vector2i.ZERO:
+				var operand := command.arguments[0]
+				var direction := _read_expression(operand, variables, read_box_color)
+				if error == null and not ProgramParser.DIRECTIONS.has(direction):
+					error = ProgramDiagnostic.new(
+							"ValueError", "invalid direction '%s'" % direction,
+							command.program_source, command.line, operand.operand_column, true
+					)
+				if error != null:
+					is_running = false
+					return false
+				movement = ProgramCommand.new(ProgramCommand.Type.MOVE, command.line)
+				movement.direction = ProgramParser.DIRECTIONS[direction]
+			action_error = await _perform_action(movement, move_action, game_action, tree)
 		else:
-			output_emitted.emit(command.text)
-			await tree.create_timer(STEP_DURATION).timeout
+			action_error = await _perform_action(command, move_action, game_action, tree)
+		if not action_error.is_empty():
+			is_running = false
+			return false
 		completed_step = true
 		if _stop_requested:
 			break
@@ -155,9 +177,23 @@ func resume(single_step: bool = false) -> void:
 		pause_changed.emit(false)
 
 
+func _perform_action(
+		command: ProgramCommand, move_action: Callable, game_action: Callable, tree: SceneTree
+) -> String:
+	if game_action.is_valid():
+		var message: String = await game_action.call(command, STEP_DURATION)
+		return message
+	if command.type == ProgramCommand.Type.MOVE:
+		await move_action.call(command.direction, STEP_DURATION)
+	else:
+		output_emitted.emit(command.text)
+		await tree.create_timer(STEP_DURATION).timeout
+	return ""
+
+
 func _check_function_call(
-		command: ProgramCommand, definition_index: int, variables: Dictionary[String, String],
-		local_names: Array[String], call_stack: Array[Dictionary]
+		command: ProgramCommand, definition_index: int, parameter_count: int,
+		variables: Dictionary[String, String], local_names: Array[String], call_stack: Array[Dictionary]
 ) -> ProgramDiagnostic:
 	var name := command.function_name
 	var error_type: String
@@ -171,9 +207,11 @@ func _check_function_call(
 	elif definition_index < 0:
 		error_type = "NameError"
 		message = "name '%s' is not defined" % name
-	elif command.argument_count != 0:
+	elif command.arguments.size() != parameter_count:
 		error_type = "TypeError"
-		message = "%s() takes 0 arguments (%d given)" % [name, command.argument_count]
+		message = "%s() takes %d positional arguments (%d given)" % [
+			name, parameter_count, command.arguments.size(),
+		]
 	else:
 		for frame: Dictionary in call_stack:
 			if frame.definition_index == definition_index:

@@ -29,7 +29,8 @@ var right_operand: ProgramCommand
 var constant_condition: bool = false
 var jump_index: int = -1
 var function_name: String = ""
-var argument_count: int = 0
+var arguments: Array[ProgramCommand] = []
+var parameters: Array[String] = []
 var call_column: int = 1
 var local_names: Array[String] = []
 var error: ProgramDiagnostic

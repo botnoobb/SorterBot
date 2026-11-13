@@ -54,10 +54,28 @@ func _test_functions() -> void:
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
 	var lines: Array[int] = []
+	var cells_before_step: Array[Vector2i] = []
 	executor.step_started.connect(func(line: int) -> void:
 		lines.append(line)
+		cells_before_step.append(robot.cell)
 		_expect(code.get_line_background_color(line - 1).a > 0, "Строка функции подсвечена")
 	)
+	code.text = "def travel(direction):\n    move(direction)\ntravel('right')\n"
+	code.text += "right = 'left'\ntravel(right)"
+	for single_step: bool in [false, true]:
+		lines.clear()
+		cells_before_step.clear()
+		var start: Button = step if single_step else run
+		start.pressed.emit()
+		var deadline := create_timer(5.0)
+		while not stop.disabled and deadline.time_left > 0.0:
+			if single_step and not step.disabled:
+				step.pressed.emit()
+			await process_frame
+		_expect(stop.disabled and lines == [3, 2, 4, 5, 2]
+				and cells_before_step == [Vector2i(1, 3), Vector2i(1, 3), Vector2i(2, 3),
+						Vector2i(2, 3), Vector2i(2, 3)] and robot.cell == Vector2i(1, 3),
+				"Аргументы меняют направление движения в обоих режимах")
 	code.text = (
 			'message = "global"\ndef advance():\n    print(message)\n'
 			+ '    move("right")\ndef finish():\n    message = "local"\n'
@@ -91,10 +109,12 @@ func _test_functions() -> void:
 	_click_reference_button(reference.get_node("Content/Sections/Functions"))
 	await create_timer(0.3).timeout
 	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	_expect(article.get_parsed_text().contains("def travel(direction):"),
+			"Справка содержит пример функции с параметром")
 	var paragraphs := article.get_parsed_text().split("\n\n")
-	_expect(paragraphs.size() == 5 and paragraphs[0] == "Функции",
+	_expect(paragraphs.size() >= 5 and paragraphs[0] == "Функции",
 			"Справка содержит объяснение и пример функций")
-	if paragraphs.size() == 5:
+	if paragraphs.size() >= 5:
 		var reset: Button = content.get_node("ResetCargo")
 		reset.pressed.emit()
 		await process_frame
@@ -111,11 +131,22 @@ func _test_functions() -> void:
 	await process_frame
 
 	var parser := ProgramParser.new()
-	for source: String in ["def", "def f(x):\n    pass", "def f():\npass",
+	for source: String in ["def", "def f(x, x):\n    pass", "def f():\npass",
 			"def f():\n    def g():\n        pass", "def get_box_color():\n    pass", "return"]:
 		_expect(parser.parse(source).is_empty() and parser.error != null,
 				"Синтаксическая ошибка в определении функции: " + source)
 	var diagnostics_executor := ProgramExecutor.new()
+	var output_values: Array[String] = []
+	diagnostics_executor.output_emitted.connect(func(value: String) -> void: output_values.append(value))
+	var parameter_program := parser.parse(
+			"def show(first, second):\n    print(first)\n    print(second)\n"
+			+ "def forward(value):\n    show(value, get_box_color())\nforward('local')"
+	)
+	var ran: bool = await diagnostics_executor.run(
+			parameter_program, Callable(), self, false, Callable(), func() -> String: return "blue"
+	)
+	_expect(ran and output_values == ["local", "blue"],
+			"Позиционные аргументы читаются в области вызывающего кода")
 	var missing_operand := parser.parse("def f():\n    print(missing)\nf()")
 	var printed: bool = await diagnostics_executor.run(missing_operand, Callable(), self)
 	_expect(not printed and diagnostics_executor.error != null
@@ -124,7 +155,12 @@ func _test_functions() -> void:
 	for sample: Array in [
 		["f()\ndef f():\n    pass", "NameError"],
 		["def f():\n    pass\nf('x')", "TypeError"],
+		["def f(first, second):\n    pass\nf('x')", "TypeError"],
+		["def f(value):\n    pass\nf(missing)", "NameError"],
+		["direction = 'north'\nmove(direction)", "ValueError"],
+		["move(right)", "NameError"],
 		["def f():\n    f()\nf()", "RuntimeError"],
+		["def f(x):\n    f()\nf('x')", "TypeError"],
 		["f()", "NameError"],
 	]:
 		var commands := parser.parse(sample[0])
@@ -355,7 +391,6 @@ func _test_parser() -> void:
 	if commands.size() == 2:
 		_expect(commands[0].line == 2 and commands[1].line == 4, "Номера строк")
 	for source: String in [
-		"move(up)",
 		"move('up'", "move('up\")", "move('up') move('down')",
 		"move('up');", "move('u\np')", "move(42)",
 		"move('up')\n@", "move('up')\nmove('bad'",

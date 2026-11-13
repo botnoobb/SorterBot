@@ -78,20 +78,15 @@ func _parse_block(
 		if opening.type != Token.Type.LEFT_PAREN:
 			return _fail(source, opening)
 		index += 1
-		var arguments: Array[Token] = []
+		var arguments := command.arguments
 		while tokens[index].type != Token.Type.RIGHT_PAREN:
 			if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
 				return _fail(source, opening, "'(' was never closed")
-			var argument: Token = tokens[index]
+			var argument := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
+			index = _parse_operand(source, tokens, index, argument)
+			if error != null:
+				return index
 			arguments.append(argument)
-			if name.text == "print":
-				index = _parse_operand(source, tokens, index, command)
-				if error != null:
-					return index
-			elif argument.type == Token.Type.STRING:
-				index += 1
-			else:
-				return _fail(source, argument)
 			if tokens[index].type == Token.Type.COMMA:
 				index += 1
 			elif tokens[index].type != Token.Type.RIGHT_PAREN:
@@ -102,7 +97,6 @@ func _parse_block(
 		if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 			return _fail(source, tokens[index])
 		command.function_name = name.text
-		command.argument_count = arguments.size()
 		command.program_source = source
 		command.call_column = name.column
 		_configure_call(source, name, arguments, command)
@@ -121,13 +115,26 @@ func _parse_function(
 		return _fail(source, name, "cannot redefine 'get_box_color'")
 	if tokens[index + 2].type != Token.Type.LEFT_PAREN:
 		return _fail(source, tokens[index + 2], "expected '('")
-	if tokens[index + 3].type != Token.Type.RIGHT_PAREN:
-		return _fail(source, tokens[index + 3], "expected ')' without parameters")
 	var definition := ProgramCommand.new(ProgramCommand.Type.DEFINE_FUNCTION, keyword.line)
 	definition.function_name = name.text
+	index += 3
+	while tokens[index].type != Token.Type.RIGHT_PAREN:
+		var parameter := tokens[index]
+		if parameter.type != Token.Type.IDENTIFIER or parameter.text in RESERVED_NAMES:
+			return _fail(source, parameter, "expected a parameter name")
+		if parameter.text in definition.parameters:
+			return _fail(source, parameter, "duplicate argument '%s' in function definition" % parameter.text)
+		definition.parameters.append(parameter.text)
+		definition.local_names.append(parameter.text)
+		index += 1
+		if tokens[index].type != Token.Type.COMMA:
+			break
+		index += 1
+	if tokens[index].type != Token.Type.RIGHT_PAREN:
+		return _fail(source, tokens[index], "expected ')'")
 	var body_start := commands.size() + 1
 	commands.append(definition)
-	index = _parse_indented_block(source, tokens, index + 4, keyword.column, commands)
+	index = _parse_indented_block(source, tokens, index + 1, keyword.column, commands)
 	if error != null:
 		return index
 	for body_index: int in range(body_start, commands.size()):
@@ -210,7 +217,7 @@ func _parse_indented_block(
 
 
 func _configure_call(
-		source: String, name: Token, arguments: Array[Token], command: ProgramCommand
+		source: String, name: Token, arguments: Array[ProgramCommand], command: ProgramCommand
 ) -> void:
 	var error_type: String = ""
 	var message: String = ""
@@ -220,19 +227,22 @@ func _configure_call(
 	elif arguments.size() != (0 if name.text in ["grab", "put"] else 1):
 		error_type = "TypeError"
 		message = "%s() takes exactly %d argument (%d given)" % [name.text, 0 if name.text in ["grab", "put"] else 1, arguments.size()]
-	elif name.text == "move" and not DIRECTIONS.has(arguments[0].text):
+	elif (name.text == "move" and arguments[0].operand_kind == ProgramCommand.OperandKind.LITERAL
+			and not DIRECTIONS.has(arguments[0].text)):
 		error_type = "ValueError"
 		message = "invalid direction '%s'" % arguments[0].text
 	else:
 		if name.text == "move":
 			command.type = ProgramCommand.Type.MOVE
-			command.direction = DIRECTIONS[arguments[0].text]
+			if arguments[0].operand_kind == ProgramCommand.OperandKind.LITERAL:
+				command.direction = DIRECTIONS[arguments[0].text]
 		elif name.text == "grab":
 			command.type = ProgramCommand.Type.GRAB
 		elif name.text == "put":
 			command.type = ProgramCommand.Type.PUT
 		else:
 			command.type = ProgramCommand.Type.PRINT
+			command.text = arguments[0].text
 		return
 	# Диагностика сохраняется в команде и возникает только при её выполнении.
 	command.error = ProgramDiagnostic.new(
