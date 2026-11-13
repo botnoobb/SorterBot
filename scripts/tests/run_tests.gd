@@ -12,13 +12,18 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	if OS.get_cmdline_user_args().has("--reset-cargo"):
-		await _test_reset_cargo()
+	var arguments := OS.get_cmdline_user_args()
+	if arguments.has("--reset-cargo") or arguments.has("--functions"):
+		if arguments.has("--functions"):
+			await _test_functions()
+		else:
+			await _test_reset_cargo()
 		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 		quit(1 if _failures > 0 else 0)
 		return
 	await _test_variables()
 	await _test_while()
+	await _test_functions()
 	await _test_conditions()
 	await _test_first_lesson()
 	_test_parser()
@@ -32,6 +37,101 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_functions() -> void:
+	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
+	var game: Control = packed.instantiate()
+	root.add_child(game)
+	await process_frame
+	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var run: Button = content.get_node("Header/Run")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	var executor: ProgramExecutor = game.get("_executor")
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	var lines: Array[int] = []
+	executor.step_started.connect(func(line: int) -> void:
+		lines.append(line)
+		_expect(code.get_line_background_color(line - 1).a > 0, "Строка функции подсвечена")
+	)
+	code.text = (
+			'message = "global"\ndef advance():\n    print(message)\n'
+			+ '    move("right")\ndef finish():\n    message = "local"\n'
+			+ "    advance()\n    print(message)\nadvance()\nfinish()\nprint(message)"
+	)
+	for single_step: bool in [false, true]:
+		lines.clear()
+		var pauses: Array[int] = []
+		var start: Button = step if single_step else run
+		start.pressed.emit()
+		var deadline := create_timer(8.0)
+		while not stop.disabled and deadline.time_left > 0.0:
+			if single_step and not step.disabled:
+				pauses.append(lines.back())
+				step.pressed.emit()
+			await process_frame
+		_expect(stop.disabled and lines == [1, 9, 3, 4, 10, 6, 7, 3, 4, 8, 11],
+				"Вызов и тело функции подсвечиваются по порядку, возврат проходит без шага")
+		_expect(output.get_parsed_text() == "global\nglobal\nlocal\nglobal\n",
+				"Функции читают глобальные переменные, присваивания остаются локальными")
+		if single_step:
+			_expect(pauses == [1, 9, 3, 4, 10, 6, 7, 3, 4, 8],
+					"Вызов и каждая инструкция тела занимают отдельный шаг")
+		else:
+			_expect(robot.cell == Vector2i(3, 3), "Два вызова перемещают робота дважды")
+			var reset: Button = content.get_node("ResetCargo")
+			reset.pressed.emit()
+			await process_frame
+
+	var reference := game.get_node("ReferencePanel")
+	_click_reference_button(reference.get_node("Content/Sections/Functions"))
+	await create_timer(0.3).timeout
+	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	var paragraphs := article.get_parsed_text().split("\n\n")
+	_expect(paragraphs.size() == 5 and paragraphs[0] == "Функции",
+			"Справка содержит объяснение и пример функций")
+	if paragraphs.size() == 5:
+		var reset: Button = content.get_node("ResetCargo")
+		reset.pressed.emit()
+		await process_frame
+		var zones: Array[Vector2i] = []
+		field.cargo_delivered.connect(func() -> void: zones.append(robot.cell))
+		code.text = paragraphs[2] + "\n" + paragraphs[3]
+		run.pressed.emit()
+		var deadline := create_timer(12.0)
+		while not stop.disabled and deadline.time_left > 0.0:
+			await process_frame
+		_expect(stop.disabled and zones == [Vector2i(3, 2), Vector2i(3, 3)],
+				"Пример из справки двумя вызовами доставляет коробки в зоны их цветов")
+	game.queue_free()
+	await process_frame
+
+	var parser := ProgramParser.new()
+	for source: String in ["def", "def f(x):\n    pass", "def f():\npass",
+			"def f():\n    def g():\n        pass", "def get_box_color():\n    pass", "return"]:
+		_expect(parser.parse(source).is_empty() and parser.error != null,
+				"Синтаксическая ошибка в определении функции: " + source)
+	var diagnostics_executor := ProgramExecutor.new()
+	var missing_operand := parser.parse("def f():\n    print(missing)\nf()")
+	var printed: bool = await diagnostics_executor.run(missing_operand, Callable(), self)
+	_expect(not printed and diagnostics_executor.error != null
+			and diagnostics_executor.error.line == 2 and diagnostics_executor.error.column == 11,
+			"Диагностика указывает на имя в аргументе print")
+	for sample: Array in [
+		["f()\ndef f():\n    pass", "NameError"],
+		["def f():\n    pass\nf('x')", "TypeError"],
+		["def f():\n    f()\nf()", "RuntimeError"],
+		["f()", "NameError"],
+	]:
+		var commands := parser.parse(sample[0])
+		var success: bool = await diagnostics_executor.run(commands, Callable(), self)
+		_expect(parser.error == null and not success and diagnostics_executor.error != null
+				and diagnostics_executor.error.type == sample[1],
+				"Диагностика вызова: " + sample[0])
 
 
 func _test_while() -> void:

@@ -53,6 +53,20 @@ const WHILE_REFERENCE := (
 		+ "но «Стоп» всё равно завершает выполнение."
 )
 
+const FUNCTIONS_REFERENCE := (
+		"Функции\n\nДоставьте две коробки одним запуском. Вынесите повторяющийся маршрут "
+		+ "в функцию deliver. Строка def задаёт имя, а инструкции с отступом образуют тело. "
+		+ "Каждый вызов deliver() выполняет тело заново.\n\n"
+		+ "def deliver():\n    color = get_box_color()\n    grab()\n"
+		+ '    move("right")\n    move("right")\n    if color == "orange":\n'
+		+ '        put()\n    else:\n        move("down")\n        put()\n'
+		+ '        move("up")\n    move("left")\n    move("left")\n\n'
+		+ 'move("up")\ndeliver()\ndeliver()\n\n'
+		+ "Попробуйте режим «Шаг». После подсветки deliver() следующий шаг начнёт тело, "
+		+ "а после последней инструкции выполнение продолжится после вызова. "
+		+ "Присваивание внутри функции создаёт локальную переменную."
+)
+
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
@@ -101,6 +115,9 @@ func _ready() -> void:
 			_open_reference.bind(CONDITIONS_REFERENCE)
 	)
 	$ReferencePanel/Content/Sections/While.pressed.connect(_open_reference.bind(WHILE_REFERENCE))
+	$ReferencePanel/Content/Sections/Functions.pressed.connect(
+			_open_reference.bind(FUNCTIONS_REFERENCE)
+	)
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)

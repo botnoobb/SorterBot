@@ -1,7 +1,20 @@
 extends RefCounted
 class_name ProgramCommand
 
-enum Type { MOVE, PRINT, GRAB, PUT, INVALID, ASSIGN, CONDITION, JUMP, PASS }
+enum Type {
+	MOVE,
+	PRINT,
+	GRAB,
+	PUT,
+	INVALID,
+	ASSIGN,
+	CONDITION,
+	JUMP,
+	PASS,
+	DEFINE_FUNCTION,
+	CALL_FUNCTION,
+	RETURN_FUNCTION,
+}
 enum OperandKind { LITERAL, VARIABLE, BOX_COLOR }
 
 var type: Type
@@ -15,6 +28,10 @@ var program_source: String = ""
 var right_operand: ProgramCommand
 var constant_condition: bool = false
 var jump_index: int = -1
+var function_name: String = ""
+var argument_count: int = 0
+var call_column: int = 1
+var local_names: Array[String] = []
 var error: ProgramDiagnostic
 
 

@@ -30,18 +30,74 @@ func run(
 	_pause_requested = single_step
 	is_paused = false
 	is_running = true
-	var variables: Dictionary[String, String] = {}
+	var globals: Dictionary[String, String] = {}
+	var functions: Dictionary[String, int] = {}
+	var call_stack: Array[Dictionary] = []
 	var index := 0
+	var completed_step := false
 	while index < commands.size():
-		var command: ProgramCommand = commands[index]
+		# Определения и переходы обрабатываются между подсвечиваемыми инструкциями.
+		var instruction := commands[index]
+		match instruction.type:
+			ProgramCommand.Type.DEFINE_FUNCTION:
+				functions[instruction.function_name] = index
+				globals.erase(instruction.function_name)
+				index = instruction.jump_index
+				continue
+			ProgramCommand.Type.JUMP:
+				index = instruction.jump_index
+				continue
+			ProgramCommand.Type.RETURN_FUNCTION:
+				var frame: Dictionary = call_stack.pop_back()
+				index = frame.return_index
+				continue
+		if completed_step and _pause_requested and not _stop_requested:
+			is_paused = true
+			pause_changed.emit(true)
+			while is_paused and not _stop_requested:
+				await tree.process_frame
+			if is_paused:
+				is_paused = false
+				pause_changed.emit(false)
+		if _stop_requested:
+			break
+		var variables: Dictionary[String, String] = globals
+		var local_names: Array[String] = []
+		if not call_stack.is_empty():
+			var frame := call_stack.back() as Dictionary
+			variables = frame.variables
+			local_names = commands[frame.definition_index].local_names
+		var command := instruction
 		var next_index := index + 1
 		step_started.emit(command.line)
-		if command.error != null:
+		if not command.function_name.is_empty() and (
+				functions.has(command.function_name)
+				or command.type == ProgramCommand.Type.CALL_FUNCTION
+		):
+			var name := command.function_name
+			error = _check_function_call(
+					command, functions.get(name, -1), variables, local_names, call_stack
+			)
+			if error != null:
+				is_running = false
+				return false
+			var definition_index := functions[name]
+			var scope := globals.duplicate()
+			for local_name: String in commands[definition_index].local_names:
+				scope.erase(local_name)
+			call_stack.append({
+				"variables": scope,
+				"definition_index": definition_index,
+				"return_index": next_index,
+			})
+			next_index = definition_index + 1
+			await tree.create_timer(STEP_DURATION).timeout
+		elif command.error != null:
 			error = command.error
 			is_running = false
 			return false
 		# Следующая команда ждёт завершения движения робота.
-		if command.type == ProgramCommand.Type.CONDITION:
+		elif command.type == ProgramCommand.Type.CONDITION:
 			var matches := _condition_matches(command, variables, read_box_color)
 			if error != null:
 				is_running = false
@@ -58,6 +114,8 @@ func run(
 				return false
 			if command.type == ProgramCommand.Type.ASSIGN:
 				variables[command.target_variable] = value
+				if call_stack.is_empty():
+					functions.erase(command.target_variable)
 			else:
 				output_emitted.emit(value)
 			await tree.create_timer(STEP_DURATION).timeout
@@ -71,24 +129,13 @@ func run(
 		else:
 			output_emitted.emit(command.text)
 			await tree.create_timer(STEP_DURATION).timeout
-		# Переходы между командами не являются отдельными шагами.
-		while next_index < commands.size() and commands[next_index].type == ProgramCommand.Type.JUMP:
-			next_index = commands[next_index].jump_index
-		if _pause_requested and not _stop_requested and next_index < commands.size():
-			is_paused = true
-			pause_changed.emit(true)
-			while is_paused and not _stop_requested:
-				await tree.process_frame
-			if is_paused:
-				is_paused = false
-				pause_changed.emit(false)
+		completed_step = true
 		if _stop_requested:
-			was_stopped = true
-			is_running = false
-			return false
+			break
 		index = next_index
+	was_stopped = _stop_requested
 	is_running = false
-	return true
+	return not was_stopped
 
 
 func request_stop() -> void:
@@ -106,6 +153,38 @@ func resume(single_step: bool = false) -> void:
 		_pause_requested = single_step
 		is_paused = false
 		pause_changed.emit(false)
+
+
+func _check_function_call(
+		command: ProgramCommand, definition_index: int, variables: Dictionary[String, String],
+		local_names: Array[String], call_stack: Array[Dictionary]
+) -> ProgramDiagnostic:
+	var name := command.function_name
+	var error_type: String
+	var message: String
+	if variables.has(name):
+		error_type = "TypeError"
+		message = "'str' object is not callable"
+	elif name in local_names:
+		error_type = "UnboundLocalError"
+		message = "local variable '%s' is not assigned" % name
+	elif definition_index < 0:
+		error_type = "NameError"
+		message = "name '%s' is not defined" % name
+	elif command.argument_count != 0:
+		error_type = "TypeError"
+		message = "%s() takes 0 arguments (%d given)" % [name, command.argument_count]
+	else:
+		for frame: Dictionary in call_stack:
+			if frame.definition_index == definition_index:
+				return ProgramDiagnostic.new(
+						"RuntimeError", "recursive calls are not supported", command.program_source,
+						command.line, command.call_column, true
+				)
+		return null
+	return ProgramDiagnostic.new(
+			error_type, message, command.program_source, command.line, command.call_column, true
+	)
 
 
 func _condition_matches(

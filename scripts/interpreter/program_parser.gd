@@ -8,6 +8,8 @@ const DIRECTIONS: Dictionary[String, Vector2i] = {
 	"right": Vector2i.RIGHT,
 }
 
+const RESERVED_NAMES := ["def", "if", "else", "while", "pass", "return", "True", "False"]
+
 var error: ProgramDiagnostic
 
 
@@ -40,12 +42,19 @@ func _parse_block(
 			return _fail(source, name, "unexpected indent")
 		if name.type != Token.Type.IDENTIFIER:
 			return _fail(source, name)
+		if name.text == "def":
+			if column != 0 or name.column != 1:
+				return _fail(source, name, "function definitions must be at the top level")
+			index = _parse_function(source, tokens, index, commands)
+			if error != null:
+				return index
+			continue
 		if name.text in ["if", "while"]:
 			index = _parse_control(source, tokens, index, commands)
 			if error != null:
 				return index
 			continue
-		if name.text in ["else", "True", "False"]:
+		if name.text in ["else", "return", "True", "False"]:
 			return _fail(source, name)
 		index += 1
 		var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
@@ -92,8 +101,43 @@ func _parse_block(
 		index += 1
 		if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 			return _fail(source, tokens[index])
+		command.function_name = name.text
+		command.argument_count = arguments.size()
+		command.program_source = source
+		command.call_column = name.column
 		_configure_call(source, name, arguments, command)
 		commands.append(command)
+	return index
+
+
+func _parse_function(
+		source: String, tokens: Array[Token], index: int, commands: Array[ProgramCommand]
+) -> int:
+	var keyword := tokens[index]
+	var name := tokens[index + 1]
+	if name.type != Token.Type.IDENTIFIER or name.text in RESERVED_NAMES:
+		return _fail(source, name, "expected a function name")
+	if name.text == "get_box_color":
+		return _fail(source, name, "cannot redefine 'get_box_color'")
+	if tokens[index + 2].type != Token.Type.LEFT_PAREN:
+		return _fail(source, tokens[index + 2], "expected '('")
+	if tokens[index + 3].type != Token.Type.RIGHT_PAREN:
+		return _fail(source, tokens[index + 3], "expected ')' without parameters")
+	var definition := ProgramCommand.new(ProgramCommand.Type.DEFINE_FUNCTION, keyword.line)
+	definition.function_name = name.text
+	var body_start := commands.size() + 1
+	commands.append(definition)
+	index = _parse_indented_block(source, tokens, index + 4, keyword.column, commands)
+	if error != null:
+		return index
+	for body_index: int in range(body_start, commands.size()):
+		var instruction := commands[body_index]
+		if instruction.type == ProgramCommand.Type.ASSIGN:
+			var local_name := instruction.target_variable
+			if local_name not in definition.local_names:
+				definition.local_names.append(local_name)
+	commands.append(ProgramCommand.new(ProgramCommand.Type.RETURN_FUNCTION, keyword.line))
+	definition.jump_index = commands.size()
 	return index
 
 
@@ -171,8 +215,8 @@ func _configure_call(
 	var error_type: String = ""
 	var message: String = ""
 	if name.text not in ["move", "print", "grab", "put"]:
-		error_type = "NameError"
-		message = "name '%s' is not defined" % name.text
+		command.type = ProgramCommand.Type.CALL_FUNCTION
+		return
 	elif arguments.size() != (0 if name.text in ["grab", "put"] else 1):
 		error_type = "TypeError"
 		message = "%s() takes exactly %d argument (%d given)" % [name.text, 0 if name.text in ["grab", "put"] else 1, arguments.size()]
@@ -200,7 +244,7 @@ func _parse_operand(
 		source: String, tokens: Array[Token], index: int, command: ProgramCommand
 ) -> int:
 	var value := tokens[index]
-	var reserved := value.type == Token.Type.IDENTIFIER and value.text in ["True", "False"]
+	var reserved := value.type == Token.Type.IDENTIFIER and value.text in RESERVED_NAMES
 	if reserved or value.type not in [Token.Type.STRING, Token.Type.IDENTIFIER]:
 		error = ProgramDiagnostic.new("SyntaxError", "invalid syntax", source, value.line, value.column)
 		return index
