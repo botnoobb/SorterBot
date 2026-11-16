@@ -13,8 +13,12 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
-	if arguments.has("--reset-cargo") or arguments.has("--functions"):
-		if arguments.has("--functions"):
+	if arguments.has("--reset-cargo") or arguments.has("--functions") or arguments.has(
+		"--syntax-highlighting"
+	):
+		if arguments.has("--syntax-highlighting"):
+			await _test_syntax_highlighting()
+		elif arguments.has("--functions"):
 			await _test_functions()
 		else:
 			await _test_reset_cargo()
@@ -32,11 +36,71 @@ func _run() -> void:
 	await _test_diagnostics()
 	await _test_scene()
 	await _test_reference_panel()
+	await _test_syntax_highlighting()
 	await _test_delivery()
 	await _test_wrong_delivery()
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_syntax_highlighting() -> void:
+	var game: Node = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	var code := game.find_child("Code", true, false) as CodeEdit
+	var highlighter := code.syntax_highlighter
+	_expect(highlighter != null, "В игровой сцене подключена подсветка синтаксиса")
+	if highlighter != null:
+		var examples := {
+			"color = get_box_color()": {
+				"color": "#b8d9ff", "=": "#a0b3c9", "get_box_color": "#7ddfff",
+			},
+			'color = "blue"': { '"blue"': "#a6e3a1" },
+			'if color == "orange":': { "if": "#cba6f7", "==": "#a0b3c9" },
+			"else:": { "else": "#cba6f7" },
+			'while state == "repeat":': { "while": "#cba6f7", "==": "#a0b3c9" },
+			"while True:": { "while": "#cba6f7", "True": "#f9c97a" },
+			"while False:": { "False": "#f9c97a" },
+			"    pass": { "pass": "#cba6f7" },
+			"def deliver():": { "def": "#cba6f7", "deliver": "#7ddfff" },
+			"deliver()": { "deliver": "#7ddfff" },
+			"def travel(direction):": { "direction": "#b8d9ff" },
+			'travel("right")': { '"right"': "#a6e3a1" },
+			"travel(direction)": { "direction": "#b8d9ff" },
+			"    return direction": { "return": "#cba6f7" },
+			"import len(42) #": { "import": "#b8d9ff", "len": "#7ddfff" },
+			'color = "if': { '"if': "#a6e3a1" },
+		}
+		for source: String in examples:
+			code.text = source
+			await process_frame
+			var changes := highlighter.get_line_syntax_highlighting(0)
+			for token: String in examples[source]:
+				var change: Dictionary = changes.get(source.find(token), {})
+				_expect(
+					change.get("color") == Color(examples[source][token]),
+					"Цвет «%s» в строке «%s»" % [token, source]
+				)
+		code.text = "if\npass"
+		await process_frame
+		var before := highlighter.get_line_syntax_highlighting(1)
+		code.set_line(1, "False")
+		await process_frame
+		var after := highlighter.get_line_syntax_highlighting(1)
+		_expect(before != after, "Подсветка обновляется при редактировании строки")
+		code.text = "42 # while_true"
+		await process_frame
+		var unsupported := highlighter.get_line_syntax_highlighting(0)
+		_expect(
+			not unsupported.has(0) and not unsupported.has(3),
+			"Числа и знак комментария Python не получают отдельной подсветки"
+		)
+		_expect(
+			unsupported.get(5, {}).get("color") == Color("#b8d9ff"),
+			"Ключевое слово внутри имени не меняет цвет идентификатора"
+		)
+	game.queue_free()
+	await process_frame
 
 
 func _test_functions() -> void:

@@ -7,6 +7,7 @@ signal step_requested(source: String)
 signal cargo_reset_requested()
 
 const EXECUTION_COLOR := Color(1.0, 0.85, 0.25, 0.22)
+const ProgramSyntaxHighlighter = preload("res://scripts/ui/program_syntax_highlighter.gd")
 
 var _error_line: int = -1
 var _running: bool = false
@@ -22,6 +23,7 @@ var _execution_line: int = -1
 
 
 func _ready() -> void:
+	_code.syntax_highlighter = ProgramSyntaxHighlighter.new()
 	_output.error_location_clicked.connect(_on_error_location_clicked)
 	_run_button.pressed.connect(_on_run_pressed)
 	_stop_button.pressed.connect(_on_stop_pressed)
