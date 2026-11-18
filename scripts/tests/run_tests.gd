@@ -68,6 +68,7 @@ func _test_syntax_highlighting() -> void:
 			'travel("right")': { '"right"': "#a6e3a1" },
 			"travel(direction)": { "direction": "#b8d9ff" },
 			"    return direction": { "return": "#cba6f7" },
+			"    return None": { "return": "#cba6f7", "None": "#cba6f7" },
 			"import len(42) #": { "import": "#b8d9ff", "len": "#7ddfff" },
 			'color = "if': { '"if': "#a6e3a1" },
 		}
@@ -124,6 +125,19 @@ func _test_functions() -> void:
 		cells_before_step.append(robot.cell)
 		_expect(code.get_line_background_color(line - 1).a > 0, "Строка функции подсвечена")
 	)
+	code.text = "def choose():\n    return 'right'\n    pass\nx = choose()\nmove(x)"
+	for single_step: bool in [false, true]:
+		lines.clear()
+		var start: Button = step if single_step else run
+		start.pressed.emit()
+		var return_deadline := create_timer(5.0)
+		while not stop.disabled and return_deadline.time_left > 0.0:
+			if single_step and not step.disabled:
+				step.pressed.emit()
+			await process_frame
+		_expect(lines == [4, 2, 5] and robot.cell == Vector2i(2, 3), "Возврат передаёт направление")
+		content.get_node("ResetCargo").pressed.emit()
+		await process_frame
 	code.text = "def travel(direction):\n    move(direction)\ntravel('right')\n"
 	code.text += "right = 'left'\ntravel(right)"
 	for single_step: bool in [false, true]:
@@ -191,6 +205,22 @@ func _test_functions() -> void:
 			await process_frame
 		_expect(stop.disabled and zones == [Vector2i(3, 2), Vector2i(3, 3)],
 				"Пример из справки двумя вызовами доставляет коробки в зоны их цветов")
+	var return_zones: Array[Vector2i] = []
+	field.cargo_delivered.connect(func() -> void: return_zones.append(robot.cell))
+	for single_step: bool in [false, true]:
+		content.get_node("ResetCargo").pressed.emit()
+		await process_frame
+		code.text = paragraphs[-1]
+		var start: Button = step if single_step else run
+		start.pressed.emit()
+		var deadline := create_timer(10.0)
+		while not stop.disabled and deadline.time_left > 0.0:
+			if single_step and not step.disabled:
+				step.pressed.emit()
+			await process_frame
+		_expect(stop.disabled and executor.error == null, "Пример с return завершается")
+	_expect(return_zones == [SorterField.ZONE_CELL, SorterField.BLUE_ZONE_CELL],
+			"Назначение из return используется при доставке в обоих режимах")
 	game.queue_free()
 	await process_frame
 
@@ -211,6 +241,14 @@ func _test_functions() -> void:
 	)
 	_expect(ran and output_values == ["local", "blue"],
 			"Позиционные аргументы читаются в области вызывающего кода")
+	output_values.clear()
+	var none_program := parser.parse(
+			"def empty():\n    pass\ndef bare():\n    return\n"
+			+ "x = empty()\ny = bare()\nprint(x)\nprint(y)\n"
+			+ "if x == None:\n    print('equal')\nif x == 'None':\n    print('wrong')"
+	)
+	ran = await diagnostics_executor.run(none_program, Callable(), self)
+	_expect(ran and output_values == ["None", "None", "equal"], "Неявный возврат и return дают None")
 	var missing_operand := parser.parse("def f():\n    print(missing)\nf()")
 	var printed: bool = await diagnostics_executor.run(missing_operand, Callable(), self)
 	_expect(not printed and diagnostics_executor.error != null

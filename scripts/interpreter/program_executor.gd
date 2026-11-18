@@ -30,7 +30,7 @@ func run(
 	_pause_requested = single_step
 	is_paused = false
 	is_running = true
-	var globals: Dictionary[String, String] = {}
+	var globals: Dictionary[String, Variant] = {}
 	var functions: Dictionary[String, int] = {}
 	var call_stack: Array[Dictionary] = []
 	var index := 0
@@ -49,6 +49,7 @@ func run(
 				continue
 			ProgramCommand.Type.RETURN_FUNCTION:
 				var frame: Dictionary = call_stack.pop_back()
+				_store_return(frame, null, functions)
 				index = frame.return_index
 				continue
 		if completed_step and _pause_requested and not _stop_requested:
@@ -61,7 +62,7 @@ func run(
 				pause_changed.emit(false)
 		if _stop_requested:
 			break
-		var variables: Dictionary[String, String] = globals
+		var variables: Dictionary[String, Variant] = globals
 		var local_names: Array[String] = []
 		if not call_stack.is_empty():
 			var frame := call_stack.back() as Dictionary
@@ -90,7 +91,7 @@ func run(
 			for local_name: String in definition.local_names:
 				scope.erase(local_name)
 			for argument_index: int in command.arguments.size():
-				var value := _read_expression(command.arguments[argument_index], variables, read_box_color)
+				var value: Variant = _read_expression(command.arguments[argument_index], variables, read_box_color)
 				if error != null:
 					is_running = false
 					return false
@@ -99,6 +100,9 @@ func run(
 				"variables": scope,
 				"definition_index": definition_index,
 				"return_index": next_index,
+				"caller_variables": variables,
+				"target": command.target_variable,
+				"global_target": call_stack.is_empty(),
 			})
 			next_index = definition_index + 1
 			await tree.create_timer(STEP_DURATION).timeout
@@ -115,11 +119,20 @@ func run(
 			if not matches:
 				next_index = command.jump_index
 			await tree.create_timer(STEP_DURATION).timeout
+		elif command.type == ProgramCommand.Type.RETURN_VALUE:
+			var value: Variant = _read_expression(command, variables, read_box_color)
+			if error != null:
+				is_running = false
+				return false
+			var frame: Dictionary = call_stack.pop_back()
+			_store_return(frame, value, functions)
+			next_index = frame.return_index
+			await tree.create_timer(STEP_DURATION).timeout
 		elif command.type == ProgramCommand.Type.PASS:
 			await tree.create_timer(STEP_DURATION).timeout
 		elif command.type in [ProgramCommand.Type.ASSIGN, ProgramCommand.Type.PRINT]:
 			var operand := command.arguments[0] if command.type == ProgramCommand.Type.PRINT else command
-			var value := _read_expression(operand, variables, read_box_color)
+			var value: Variant = _read_expression(operand, variables, read_box_color)
 			if error != null:
 				is_running = false
 				return false
@@ -128,13 +141,13 @@ func run(
 				if call_stack.is_empty():
 					functions.erase(command.target_variable)
 			else:
-				output_emitted.emit(value)
+				output_emitted.emit("None" if value == null else str(value))
 			await tree.create_timer(STEP_DURATION).timeout
 		elif command.type == ProgramCommand.Type.MOVE:
 			var movement := command
 			if not command.arguments.is_empty() and command.direction == Vector2i.ZERO:
 				var operand := command.arguments[0]
-				var direction := _read_expression(operand, variables, read_box_color)
+				var direction: Variant = _read_expression(operand, variables, read_box_color)
 				if error == null and not ProgramParser.DIRECTIONS.has(direction):
 					error = ProgramDiagnostic.new(
 							"ValueError", "invalid direction '%s'" % direction,
@@ -177,6 +190,14 @@ func resume(single_step: bool = false) -> void:
 		pause_changed.emit(false)
 
 
+func _store_return(frame: Dictionary, value: Variant, functions: Dictionary[String, int]) -> void:
+	var target: String = frame.target
+	if not target.is_empty():
+		frame.caller_variables[target] = value
+		if frame.global_target:
+			functions.erase(target)
+
+
 func _perform_action(
 		command: ProgramCommand, move_action: Callable, game_action: Callable, tree: SceneTree
 ) -> String:
@@ -193,14 +214,15 @@ func _perform_action(
 
 func _check_function_call(
 		command: ProgramCommand, definition_index: int, parameter_count: int,
-		variables: Dictionary[String, String], local_names: Array[String], call_stack: Array[Dictionary]
+		variables: Dictionary[String, Variant], local_names: Array[String], call_stack: Array[Dictionary]
 ) -> ProgramDiagnostic:
 	var name := command.function_name
 	var error_type: String
 	var message: String
 	if variables.has(name):
 		error_type = "TypeError"
-		message = "'str' object is not callable"
+		var type_name := "NoneType" if variables[name] == null else "str"
+		message = "'%s' object is not callable" % type_name
 	elif name in local_names:
 		error_type = "UnboundLocalError"
 		message = "local variable '%s' is not assigned" % name
@@ -226,21 +248,23 @@ func _check_function_call(
 
 
 func _condition_matches(
-		command: ProgramCommand, variables: Dictionary[String, String], read_box_color: Callable
+		command: ProgramCommand, variables: Dictionary[String, Variant], read_box_color: Callable
 ) -> bool:
 	if command.right_operand == null:
 		return command.constant_condition
-	var left := _read_expression(command, variables, read_box_color)
+	var left: Variant = _read_expression(command, variables, read_box_color)
 	if error != null:
 		return false
-	var right := _read_expression(command.right_operand, variables, read_box_color)
+	var right: Variant = _read_expression(command.right_operand, variables, read_box_color)
 	return left == right
 
 
 func _read_expression(
-		command: ProgramCommand, variables: Dictionary[String, String], read_box_color: Callable
-) -> String:
+		command: ProgramCommand, variables: Dictionary[String, Variant], read_box_color: Callable
+) -> Variant:
 	match command.operand_kind:
+		ProgramCommand.OperandKind.NONE:
+			return null
 		ProgramCommand.OperandKind.LITERAL:
 			return command.text
 		ProgramCommand.OperandKind.VARIABLE:

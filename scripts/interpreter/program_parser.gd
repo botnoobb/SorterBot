@@ -8,13 +8,15 @@ const DIRECTIONS: Dictionary[String, Vector2i] = {
 	"right": Vector2i.RIGHT,
 }
 
-const RESERVED_NAMES := ["def", "if", "else", "while", "pass", "return", "True", "False"]
+const RESERVED_NAMES := ["def", "if", "else", "while", "pass", "return", "True", "False", "None"]
 
 var error: ProgramDiagnostic
+var _in_function := false
 
 
 func parse(source: String) -> Array[ProgramCommand]:
 	error = null
+	_in_function = false
 	var lexer := Lexer.new()
 	var tokens: Array[Token] = lexer.tokenize(source)
 	if lexer.error != null:
@@ -54,7 +56,22 @@ func _parse_block(
 			if error != null:
 				return index
 			continue
-		if name.text in ["else", "return", "True", "False"]:
+		if name.text == "return":
+			if not _in_function:
+				return _fail(source, name, "'return' outside function")
+			var returned := ProgramCommand.new(ProgramCommand.Type.RETURN_VALUE, name.line)
+			index += 1
+			if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
+				index = _parse_operand(source, tokens, index, returned)
+				if error != null:
+					return index
+			else:
+				returned.operand_kind = ProgramCommand.OperandKind.NONE
+			if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
+				return _fail(source, tokens[index])
+			commands.append(returned)
+			continue
+		if name.text in ["else", "True", "False", "None"]:
 			return _fail(source, name)
 		index += 1
 		var command := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
@@ -67,40 +84,60 @@ func _parse_block(
 		if tokens[index].type == Token.Type.EQUALS:
 			command.type = ProgramCommand.Type.ASSIGN
 			command.target_variable = name.text
-			index = _parse_operand(source, tokens, index + 1, command)
+			if tokens[index + 1].type == Token.Type.IDENTIFIER and (
+					tokens[index + 1].text != "get_box_color"
+					and tokens[index + 1].text not in RESERVED_NAMES
+					and tokens[index + 2].type == Token.Type.LEFT_PAREN
+			):
+				command.type = ProgramCommand.Type.CALL_FUNCTION
+				command.function_name = tokens[index + 1].text
+				command.program_source = source
+				command.call_column = tokens[index + 1].column
+				index = _parse_arguments(source, tokens, index + 2, command)
+			else:
+				index = _parse_operand(source, tokens, index + 1, command)
 			if error != null:
 				return index
 			if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 				return _fail(source, tokens[index])
 			commands.append(command)
 			continue
-		var opening: Token = tokens[index]
-		if opening.type != Token.Type.LEFT_PAREN:
-			return _fail(source, opening)
-		index += 1
-		var arguments := command.arguments
-		while tokens[index].type != Token.Type.RIGHT_PAREN:
-			if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
-				return _fail(source, opening, "'(' was never closed")
-			var argument := ProgramCommand.new(ProgramCommand.Type.INVALID, name.line)
-			index = _parse_operand(source, tokens, index, argument)
-			if error != null:
-				return index
-			arguments.append(argument)
-			if tokens[index].type == Token.Type.COMMA:
-				index += 1
-			elif tokens[index].type != Token.Type.RIGHT_PAREN:
-				if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
-					return _fail(source, opening, "'(' was never closed")
-				return _fail(source, tokens[index])
-		index += 1
+		index = _parse_arguments(source, tokens, index, command)
+		if error != null:
+			return index
 		if tokens[index].type not in [Token.Type.NEWLINE, Token.Type.END]:
 			return _fail(source, tokens[index])
 		command.function_name = name.text
 		command.program_source = source
 		command.call_column = name.column
-		_configure_call(source, name, arguments, command)
+		_configure_call(source, name, command.arguments, command)
 		commands.append(command)
+	return index
+
+
+func _parse_arguments(
+		source: String, tokens: Array[Token], index: int, command: ProgramCommand
+) -> int:
+	var opening: Token = tokens[index]
+	if opening.type != Token.Type.LEFT_PAREN:
+		return _fail(source, opening)
+	index += 1
+	var arguments := command.arguments
+	while tokens[index].type != Token.Type.RIGHT_PAREN:
+		if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
+			return _fail(source, opening, "'(' was never closed")
+		var argument := ProgramCommand.new(ProgramCommand.Type.INVALID, command.line)
+		index = _parse_operand(source, tokens, index, argument)
+		if error != null:
+			return index
+		arguments.append(argument)
+		if tokens[index].type == Token.Type.COMMA:
+			index += 1
+		elif tokens[index].type != Token.Type.RIGHT_PAREN:
+			if tokens[index].type in [Token.Type.END, Token.Type.NEWLINE]:
+				return _fail(source, opening, "'(' was never closed")
+			return _fail(source, tokens[index])
+	index += 1
 	return index
 
 
@@ -134,12 +171,14 @@ func _parse_function(
 		return _fail(source, tokens[index], "expected ')'")
 	var body_start := commands.size() + 1
 	commands.append(definition)
+	_in_function = true
 	index = _parse_indented_block(source, tokens, index + 1, keyword.column, commands)
+	_in_function = false
 	if error != null:
 		return index
 	for body_index: int in range(body_start, commands.size()):
 		var instruction := commands[body_index]
-		if instruction.type == ProgramCommand.Type.ASSIGN:
+		if not instruction.target_variable.is_empty():
 			var local_name := instruction.target_variable
 			if local_name not in definition.local_names:
 				definition.local_names.append(local_name)
@@ -254,6 +293,9 @@ func _parse_operand(
 		source: String, tokens: Array[Token], index: int, command: ProgramCommand
 ) -> int:
 	var value := tokens[index]
+	if value.type == Token.Type.IDENTIFIER and value.text == "None":
+		command.operand_kind = ProgramCommand.OperandKind.NONE
+		return index + 1
 	var reserved := value.type == Token.Type.IDENTIFIER and value.text in RESERVED_NAMES
 	if reserved or value.type not in [Token.Type.STRING, Token.Type.IDENTIFIER]:
 		error = ProgramDiagnostic.new("SyntaxError", "invalid syntax", source, value.line, value.column)

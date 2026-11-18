@@ -14,8 +14,9 @@ enum Type {
 	DEFINE_FUNCTION,
 	CALL_FUNCTION,
 	RETURN_FUNCTION,
+	RETURN_VALUE,
 }
-enum OperandKind { LITERAL, VARIABLE, BOX_COLOR }
+enum OperandKind { LITERAL, VARIABLE, BOX_COLOR, NONE }
 
 var type: Type
 var line: int

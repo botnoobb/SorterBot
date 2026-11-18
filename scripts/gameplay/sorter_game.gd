@@ -69,7 +69,13 @@ const FUNCTIONS_REFERENCE := (
 		+ "При каждом вызове параметр direction получает значение переданного аргумента. "
 		+ "С исходной клетки робот сначала пойдёт вправо, затем вернётся.\n\n"
 		+ 'def travel(direction):\n    move(direction)\n\ntravel("right")\n'
-		+ 'direction = "left"\ntravel(direction)'
+		+ 'direction = "left"\ntravel(direction)\n\n'
+		+ "Возвращаемое значение\n\nФункция выбирает назначение по цвету коробки. "
+		+ "return завершает функцию и передаёт результат в zone. Пустой return и "
+		+ "конец тела возвращают None. Перезапустите сцену перед примером.\n\n"
+		+ 'def choose_zone(color):\n    if color == "orange":\n        return "orange"\n'
+		+ '    return "blue"\nmove("up")\ncolor = get_box_color()\nzone = choose_zone(color)\n'
+		+ 'grab()\nmove("right")\nmove("right")\nif zone == "blue":\n    move("down")\nput()'
 )
 
 var _parser := ProgramParser.new()
