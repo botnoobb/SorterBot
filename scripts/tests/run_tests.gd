@@ -22,10 +22,14 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
-	if arguments.has("--reset-cargo") or arguments.has("--functions") or arguments.has(
-		"--syntax-highlighting"
+	var camera_zoom_requested := arguments.has("--camera-zoom")
+	if (
+			arguments.has("--reset-cargo") or arguments.has("--functions")
+			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 	):
-		if arguments.has("--syntax-highlighting"):
+		if camera_zoom_requested:
+			await _test_camera_zoom()
+		elif arguments.has("--syntax-highlighting"):
 			await _test_syntax_highlighting()
 		elif arguments.has("--functions"):
 			await _test_functions()
@@ -44,6 +48,7 @@ func _run() -> void:
 	await _test_execution()
 	await _test_diagnostics()
 	await _test_scene()
+	await _test_camera_zoom()
 	await _test_reference_panel()
 	await _test_syntax_highlighting()
 	await _test_delivery()
@@ -51,6 +56,71 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_camera_zoom() -> void:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	await process_frame
+	var field_view: SubViewportContainer = game.get_node("Layout/Field")
+	var camera: Camera3D = field_view.get_node("Viewport/World/Camera")
+	var field_position := field_view.global_position + field_view.size * Vector2(0.9, 0.65)
+	var initial_size := camera.size
+	_expect(_is_field_in_view(camera), "При открытии сцены всё поле помещается в кадр")
+	var field_center := Vector3(2, 0, 2)
+	var initial_screen_center := camera.unproject_position(field_center)
+	_scroll_at(field_position, MOUSE_BUTTON_WHEEL_UP)
+	_expect(camera.size < initial_size, "Колёсико вверх над полем приближает камеру")
+	for tick in range(24):
+		_scroll_at(field_position, MOUSE_BUTTON_WHEEL_UP)
+	_expect(is_equal_approx(camera.size, initial_size / 2.0), "Приближение ограничено 2×")
+	_expect(
+		initial_screen_center.distance_to(camera.unproject_position(field_center)) < 1.0,
+		"Центр поля остаётся на месте при приближении"
+	)
+	var closest_size := camera.size
+	_scroll_at(field_position, MOUSE_BUTTON_WHEEL_DOWN)
+	_expect(camera.size > closest_size, "Колёсико вниз над полем отдаляет камеру")
+	for tick in range(24):
+		_scroll_at(field_position, MOUSE_BUTTON_WHEEL_DOWN)
+	_expect(is_equal_approx(camera.size, initial_size), "Отдаление ограничено видом всего поля")
+
+	_scroll_at(field_position, MOUSE_BUTTON_WHEEL_UP)
+	var zoomed_size := camera.size
+	var code := game.find_child("Code", true, false) as CodeEdit
+	code.text = "pass\n".repeat(100)
+	await process_frame
+	var first_visible_line := code.get_first_visible_line()
+	_scroll_at(code.get_global_rect().get_center(), MOUSE_BUTTON_WHEEL_DOWN)
+	await process_frame
+	_expect(code.get_first_visible_line() > first_visible_line, "Колёсико прокручивает программу")
+	_expect(is_equal_approx(camera.size, zoomed_size), "Прокрутка программы сохраняет масштаб поля")
+	game.queue_free()
+	await process_frame
+
+
+func _is_field_in_view(camera: Camera3D) -> bool:
+	var visible_rect := camera.get_viewport().get_visible_rect()
+	for mesh: MeshInstance3D in camera.get_parent().find_children("*", "MeshInstance3D", true, false):
+		if not mesh.is_visible_in_tree():
+			continue
+		var bounds := mesh.get_aabb()
+		for corner in range(8):
+			var point := mesh.to_global(bounds.get_endpoint(corner))
+			if camera.is_position_behind(point) or not visible_rect.has_point(
+					camera.unproject_position(point)
+			):
+				return false
+	return true
+
+
+func _scroll_at(position: Vector2, button: MouseButton) -> void:
+	var event := InputEventMouseButton.new()
+	event.position = position
+	event.button_index = button
+	event.pressed = true
+	root.push_input(event, true)
 
 
 func _test_syntax_highlighting() -> void:

@@ -13,6 +13,8 @@ const LESSON_MAX_WIDTH := 380.0
 # Габариты проекции рамы, конвейеров и робота с коробкой.
 const FIELD_PROJECTION_SIZE := Vector2(9.2, 5.0)
 const FIELD_FRAME_MARGIN := 8.0
+const FIELD_MAX_ZOOM := 2.0
+const FIELD_ZOOM_STEP := 1.125
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
 		+ 'Направления: "up", "down", "left", "right".\n\n'
@@ -93,6 +95,7 @@ const FUNCTIONS_REFERENCE := (
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
+var _field_zoom: float = 1.0
 
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
@@ -144,11 +147,30 @@ func _ready() -> void:
 	)
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
+	_field_view.gui_input.connect(_on_field_gui_input)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)
 	_editor.resized.connect(_resize_lesson, CONNECT_DEFERRED)
 	_lesson.minimum_size_changed.connect(_fit_compact_lesson_height)
 	_lesson.resized.connect(_sync_reference_top)
 	_resize_lesson.call_deferred()
+
+
+func _on_field_gui_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton or not event.pressed:
+		return
+	var direction: float
+	match event.button_index:
+		MOUSE_BUTTON_WHEEL_UP:
+			direction = 1.0
+		MOUSE_BUTTON_WHEEL_DOWN:
+			direction = -1.0
+		_:
+			return
+	var wheel_steps: float = event.factor if event.factor > 0.0 else 1.0
+	var zoom_multiplier: float = pow(FIELD_ZOOM_STEP, direction * wheel_steps)
+	_field_zoom = clampf(_field_zoom * zoom_multiplier, 1.0, FIELD_MAX_ZOOM)
+	_frame_field()
+	_field_view.accept_event()
 
 
 func _resize_lesson() -> void:
@@ -199,7 +221,7 @@ func _frame_field() -> void:
 	var above_scale := _field_units_per_pixel(above_reference.size)
 	var beside_scale := _field_units_per_pixel(beside_reference.size)
 	var area := above_reference if above_scale <= beside_scale else beside_reference
-	var units_per_pixel := minf(above_scale, beside_scale)
+	var units_per_pixel := minf(above_scale, beside_scale) / _field_zoom
 
 	var offset := area.get_center() - field_rect.size * 0.5
 	_camera.size = field_rect.size.y * units_per_pixel
