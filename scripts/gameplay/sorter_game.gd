@@ -10,6 +10,9 @@ const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
+# Размер проекции поля 5×5 вместе с местами для конвейеров.
+const FIELD_FRAME_SIZE := Vector2(9.6, 5.2)
+const FIELD_FRAME_MARGIN := 8.0
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
 		+ 'Направления: "up", "down", "left", "right".\n\n'
@@ -87,6 +90,7 @@ var _cargo_reset_requested: bool = false
 @onready var _goal: Label = $Lesson/Content/Goal
 @onready var _layout: HSplitContainer = $Layout
 @onready var _field_view: Control = $Layout/Field
+@onready var _camera: Camera3D = $Layout/Field/Viewport/World/Camera
 @onready var _lesson: PanelContainer = $Lesson
 @onready var _lesson_details: RichTextLabel = $Lesson/Content/Details
 @onready var _lesson_header: HBoxContainer = $Lesson/Content/Header
@@ -162,11 +166,41 @@ func _resize_lesson() -> void:
 			break
 		font_size -= 1
 	_lesson_title.add_theme_font_size_override("font_size", font_size)
+	_frame_field.call_deferred()
 
 
 func _fit_compact_lesson_height() -> void:
 	if not _lesson_details.visible:
 		_lesson.size.y = _lesson.get_combined_minimum_size().y
+		_frame_field()
+
+
+func _frame_field() -> void:
+	var field_rect: Rect2 = _field_view.get_global_rect()
+	var lesson_margin: float = _lesson.get_theme_stylebox("panel").get_margin(SIDE_BOTTOM)
+	var top: float = _goal.get_global_rect().end.y - field_rect.position.y + lesson_margin
+	var reference_top: float = field_rect.size.y + _reference_compact_top
+	var reference_right: float = _reference_panel.get_global_rect().end.x - field_rect.position.x
+	var above_reference := Rect2(0, top, field_rect.size.x, reference_top - top)
+	var beside_reference := Rect2(
+			reference_right, top, field_rect.size.x - reference_right, field_rect.size.y - top
+	)
+
+	# Выбираем область, в которой поле и места для конвейеров будут крупнее.
+	var above_scale := _field_units_per_pixel(above_reference.size)
+	var beside_scale := _field_units_per_pixel(beside_reference.size)
+	var area := above_reference if above_scale <= beside_scale else beside_reference
+	var units_per_pixel := minf(above_scale, beside_scale)
+
+	var offset := area.get_center() - field_rect.size * 0.5
+	_camera.size = field_rect.size.y * units_per_pixel
+	_camera.h_offset = -offset.x * units_per_pixel
+	_camera.v_offset = offset.y * units_per_pixel
+
+
+func _field_units_per_pixel(area_size: Vector2) -> float:
+	var available := (area_size - Vector2.ONE * FIELD_FRAME_MARGIN * 2.0).max(Vector2.ONE)
+	return maxf(FIELD_FRAME_SIZE.x / available.x, FIELD_FRAME_SIZE.y / available.y)
 
 
 func _sync_reference_top() -> void:

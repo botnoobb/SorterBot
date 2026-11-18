@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
@@ -13,6 +13,15 @@ background_color = Color(0.08, 0.12, 0.17, 1)
 ambient_light_source = 3
 ambient_light_color = Color(0.8, 0.87, 1, 1)
 ambient_light_energy = 0.7
+
+[sub_resource type="StandardMaterial3D" id="FrameMaterial"]
+albedo_color = Color(0.12, 0.17, 0.27, 1)
+metallic = 0.2
+roughness = 0.55
+
+[sub_resource type="BoxMesh" id="FrameMesh"]
+material = SubResource("FrameMaterial")
+size = Vector3(1, 1, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_divider"]
 bg_color = Color(0.059, 0.094, 0.157, 1)
@@ -80,6 +89,33 @@ environment = SubResource("Environment")
 [node name="Light" type="DirectionalLight3D" parent="Layout/Field/Viewport/World"]
 rotation_degrees = Vector3(-60, -25, 0)
 light_energy = 1.2
+
+[node name="Frame" type="Node3D" parent="Layout/Field/Viewport/World"]
+
+[node name="BackRail" type="MeshInstance3D" parent="Layout/Field/Viewport/World/Frame"]
+position = Vector3(2, -0.13, -0.61)
+scale = Vector3(5.44, 0.24, 0.22)
+mesh = SubResource("FrameMesh")
+
+[node name="FrontRail" type="MeshInstance3D" parent="Layout/Field/Viewport/World/Frame"]
+position = Vector3(2, -0.13, 4.61)
+scale = Vector3(5.44, 0.24, 0.22)
+mesh = SubResource("FrameMesh")
+
+[node name="LeftRail" type="MeshInstance3D" parent="Layout/Field/Viewport/World/Frame"]
+position = Vector3(-0.61, -0.13, 2.5)
+scale = Vector3(0.22, 0.24, 4)
+mesh = SubResource("FrameMesh")
+
+[node name="RightBackRail" type="MeshInstance3D" parent="Layout/Field/Viewport/World/Frame"]
+position = Vector3(4.61, -0.13, 0.5)
+scale = Vector3(0.22, 0.24, 2)
+mesh = SubResource("FrameMesh")
+
+[node name="RightFrontRail" type="MeshInstance3D" parent="Layout/Field/Viewport/World/Frame"]
+position = Vector3(4.61, -0.13, 4)
+scale = Vector3(0.22, 0.24, 1)
+mesh = SubResource("FrameMesh")
 
 [node name="Robot" parent="Layout/Field/Viewport/World" instance=ExtResource("3")]
 position = Vector3(1, 0, 3)

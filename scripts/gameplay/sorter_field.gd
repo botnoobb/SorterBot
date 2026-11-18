@@ -3,6 +3,8 @@ class_name SorterField
 
 signal cargo_delivered()
 
+const FIELD_SIZE := 5
+const FLOOR_TILE := preload("res://assets/models/field/floor_tile.glb")
 const CARGO_CELL := Vector2i(1, 2)
 const ZONE_CELL := Vector2i(3, 2)
 const BLUE_ZONE_CELL := Vector2i(3, 3)
@@ -28,9 +30,15 @@ var _robot_spawn_cell: Vector2i
 func _ready() -> void:
 	_robot_spawn_cell = Vector2i(roundi(_robot.position.x), roundi(_robot.position.z))
 	_robot.cell = _robot_spawn_cell
-	for x: int in range(5):
-		for y: int in range(5):
-			_box(Vector3(x, -0.08, y), Vector3(0.96, 0.1, 0.96), Color(0.2, 0.25, 0.3))
+
+	for x: int in range(FIELD_SIZE):
+		for y: int in range(FIELD_SIZE):
+			var tile: Node3D = FLOOR_TILE.instantiate()
+			# Совмещаем поверхность плитки с уровнем движения робота.
+			tile.position = Vector3(x, -0.15, y)
+			tile.scale = Vector3(0.98, 1, 0.98)
+			add_child(tile)
+
 	_box(Vector3(CARGO_CELL.x, 0, CARGO_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.5, 0.9))
 	for color_name: String in ZONES_BY_COLOR:
 		var zone: Vector2i = ZONES_BY_COLOR[color_name]
@@ -57,7 +65,7 @@ func reset_current_cargo() -> void:
 func perform(command: ProgramCommand, duration: float) -> String:
 	if command.type == ProgramCommand.Type.MOVE:
 		var target: Vector2i = _robot.cell + command.direction
-		if target.x < 0 or target.y < 0 or target.x >= 5 or target.y >= 5:
+		if target.x < 0 or target.y < 0 or target.x >= FIELD_SIZE or target.y >= FIELD_SIZE:
 			return "Робот не может выйти за границу поля."
 		await _robot.move(command.direction, duration)
 		return ""
