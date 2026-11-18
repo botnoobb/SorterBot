@@ -10,8 +10,8 @@ const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
-# Габариты проекции рамы, входного конвейера и робота с коробкой.
-const FIELD_PROJECTION_SIZE := Vector2(7.4, 5.0)
+# Габариты проекции рамы, конвейеров и робота с коробкой.
+const FIELD_PROJECTION_SIZE := Vector2(9.2, 5.0)
 const FIELD_FRAME_MARGIN := 8.0
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
@@ -20,9 +20,10 @@ const MOVEMENT_REFERENCE := (
 )
 const CARGO_REFERENCE := (
 		"Работа с коробкой\n\ngrab() берёт коробку на клетке выдачи. "
-		+ "put() кладёт её в зоне доставки.\n\n"
+		+ "put() отправляет её по выходному конвейеру в зоне доставки.\n\n"
 		+ 'Пример со старта:\nmove("up")\nmove("up")\nmove("up")\nmove("left")\ngrab()\n'
-		+ 'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\nput()\n\n'
+		+ 'move("right")\nmove("right")\nmove("right")\nmove("right")\n'
+		+ 'move("down")\nmove("down")\nput()\n\n'
 		+ 'Для коробки blue добавьте move("down") перед put().'
 )
 const OUTPUT_REFERENCE := (
@@ -39,7 +40,7 @@ const CONDITIONS_REFERENCE := (
 		+ 'if сравнивает color с "orange". Если значения совпадают, выполнится первый блок. '
 		+ "Иначе робот выполнит команды под else. Команды внутри ветвей пишутся с отступом.\n\n"
 		+ 'color = get_box_color()\nmove("up")\nmove("up")\nmove("up")\nmove("left")\ngrab()\n'
-		+ 'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
+		+ 'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
 		+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()\n\n'
 		+ "Попробуйте обе коробки. В режиме «Шаг» строка if подсветится отдельно "
 		+ "перед первой командой выбранной ветви."
@@ -49,11 +50,11 @@ const WHILE_REFERENCE := (
 		+ "и возвращает робота на выдачу. После второй доставки нажмите «Стоп».\n\n"
 		+ 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
 		+ 'while True:\n    color = get_box_color()\n    grab()\n'
-		+ '    move("right")\n    move("right")\n    move("right")\n'
+		+ '    move("right")\n    move("right")\n    move("right")\n    move("right")\n'
 		+ '    move("down")\n    move("down")\n    if color == "orange":\n'
 		+ '        put()\n    else:\n        move("down")\n        put()\n'
 		+ '        move("up")\n    move("up")\n    move("up")\n'
-		+ '    move("left")\n    move("left")\n    move("left")\n\n'
+		+ '    move("left")\n    move("left")\n    move("left")\n    move("left")\n\n'
 		+ 'Условие проверяется перед каждым повтором. Сравнение вроде state == "repeat" '
 		+ "позволяет выйти из цикла, когда значение изменится.\n\n"
 		+ "Попробуйте while True с командой pass внутри. Робот не двигается, "
@@ -65,11 +66,11 @@ const FUNCTIONS_REFERENCE := (
 		+ "в функцию deliver. Строка def задаёт имя, а инструкции с отступом образуют тело. "
 		+ "Каждый вызов deliver() выполняет тело заново.\n\n"
 		+ "def deliver():\n    color = get_box_color()\n    grab()\n"
-		+ '    move("right")\n    move("right")\n    move("right")\n'
+		+ '    move("right")\n    move("right")\n    move("right")\n    move("right")\n'
 		+ '    move("down")\n    move("down")\n    if color == "orange":\n'
 		+ '        put()\n    else:\n        move("down")\n        put()\n'
 		+ '        move("up")\n    move("up")\n    move("up")\n'
-		+ '    move("left")\n    move("left")\n    move("left")\n\n'
+		+ '    move("left")\n    move("left")\n    move("left")\n    move("left")\n\n'
 		+ 'move("up")\nmove("up")\nmove("up")\nmove("left")\ndeliver()\ndeliver()\n\n'
 		+ "Попробуйте режим «Шаг». После подсветки deliver() следующий шаг начнёт тело, "
 		+ "а после последней инструкции выполнение продолжится после вызова. "
@@ -85,7 +86,7 @@ const FUNCTIONS_REFERENCE := (
 		+ 'def choose_zone(color):\n    if color == "orange":\n        return "orange"\n'
 		+ '    return "blue"\nmove("up")\nmove("up")\nmove("up")\nmove("left")\n'
 		+ 'color = get_box_color()\nzone = choose_zone(color)\ngrab()\n'
-		+ 'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
+		+ 'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
 		+ 'if zone == "blue":\n    move("down")\nput()'
 )
 

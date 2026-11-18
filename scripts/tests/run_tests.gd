@@ -2,9 +2,11 @@ extends SceneTree
 
 const START_TO_INPUT := 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
 const INPUT_TO_ORANGE := (
-		'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
+		'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
 )
-const ORANGE_TO_INPUT := 'move("up")\nmove("up")\nmove("left")\nmove("left")\nmove("left")\n'
+const ORANGE_TO_INPUT := (
+		'move("up")\nmove("up")\nmove("left")\nmove("left")\nmove("left")\nmove("left")\n'
+)
 const DELIVER_ORANGE := START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + "put()"
 
 var _failures: int = 0
@@ -210,7 +212,7 @@ func _test_functions() -> void:
 		var deadline := create_timer(20.0)
 		while not stop.disabled and deadline.time_left > 0.0:
 			await process_frame
-		_expect(stop.disabled and zones == [Vector2i(3, 2), Vector2i(3, 3)],
+		_expect(stop.disabled and zones == [Vector2i(4, 2), Vector2i(4, 3)],
 				"Пример из справки двумя вызовами доставляет коробки в зоны их цветов")
 	var return_zones: Array[Vector2i] = []
 	field.cargo_delivered.connect(func() -> void: return_zones.append(robot.cell))
@@ -347,11 +349,11 @@ func _test_while() -> void:
 	)
 	code.text = (
 			START_TO_INPUT + 'while True:\n    color = get_box_color()\n    grab()\n'
-			+ '    move("right")\n    move("right")\n    move("right")\n'
+			+ '    move("right")\n    move("right")\n    move("right")\n    move("right")\n'
 			+ '    move("down")\n    move("down")\n    if color == "orange":\n'
 			+ '        put()\n    else:\n        move("down")\n        put()\n'
 			+ '        move("up")\n    move("up")\n    move("up")\n'
-			+ '    move("left")\n    move("left")\n    move("left")'
+			+ '    move("left")\n    move("left")\n    move("left")\n    move("left")'
 	)
 	run.pressed.emit()
 	deadline = create_timer(18.0)
@@ -393,7 +395,7 @@ func _test_conditions() -> void:
 			+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()'
 	)
 	var lines_before_branch: Array[int] = []
-	lines_before_branch.assign(range(1, 13))
+	lines_before_branch.assign(range(1, 14))
 	for single_step: bool in [false, true]:
 		for orange: bool in [true, false]:
 			reset.pressed.emit()
@@ -411,15 +413,15 @@ func _test_conditions() -> void:
 			if single_step:
 				_expect(condition_paused, "После проверки if есть пауза перед командой ветви")
 			var expected: Array[int] = lines_before_branch.duplicate()
-			expected.append_array([13] if orange else [15, 16])
+			expected.append_array([14] if orange else [16, 17])
 			_expect(lines == expected, "После if выполняются только строки выбранной ветви")
-			var zone := Vector2i(3, 2) if orange else Vector2i(3, 3)
+			var zone := Vector2i(4, 2) if orange else Vector2i(4, 3)
 			_expect(stop.disabled and field.delivered and robot.cell == zone,
 					"Коробка доставлена в зону своего цвета")
 	reset.pressed.emit()
 	code.text = START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + 'move("down")\nput()'
 	run.pressed.emit()
-	var deadline := create_timer(5.0)
+	var deadline := create_timer(6.0)
 	while not stop.disabled and deadline.time_left > 0.0:
 		await process_frame
 	_expect(executor.action_error == "Этой коробке нужна зона orange.",
@@ -1049,7 +1051,7 @@ func _test_scene() -> void:
 	while not stop.disabled:
 		await process_frame
 	_expect(
-			delivery_cells == [SorterField.ZONE_CELL, Vector2i(3, 3)],
+			delivery_cells == [SorterField.ZONE_CELL, SorterField.BLUE_ZONE_CELL],
 			"Одна программа выполняет две доставки, робот остаётся в зоне"
 	)
 	_expect(field.delivered and not field.carrying, "Доставка засчитана после put")
@@ -1122,7 +1124,7 @@ func _test_delivery() -> void:
 	)
 	var commands: Array[ProgramCommand] = parser.parse(INPUT_TO_ORANGE + "put()")
 	executor.run(commands, robot.move, self, true, field.perform)
-	for index: int in range(5):
+	for index: int in range(6):
 		while executor.is_running and not executor.is_paused:
 			await process_frame
 		_expect(executor.is_paused and not field.delivered, "Переноска по шагам не засчитывает доставку")
@@ -1130,9 +1132,16 @@ func _test_delivery() -> void:
 	await create_timer(0.1).timeout
 	_expect(not field.delivered, "Успех ждёт завершения put")
 	executor.request_stop()
+	var outgoing: Node3D = field.get("_cargo")
+	var travelled_on_belt := false
 	while executor.is_running:
+		if is_instance_valid(outgoing) and outgoing.position.x > 5.0:
+			travelled_on_belt = true
 		await process_frame
 	_expect(field.delivered and not field.carrying, "Остановка дожидается завершения put и доставки")
+	_expect(travelled_on_belt, "Коробка проезжает по выходному конвейеру")
+	await process_frame
+	_expect(not is_instance_valid(outgoing), "Коробка исчезает после проезда по ленте")
 	game.queue_free()
 	await process_frame
 
@@ -1201,7 +1210,7 @@ func _test_wrong_delivery() -> void:
 		while executor.is_running:
 			await process_frame
 		_expect(messages.get_parsed_text() == "Робот уже несёт коробку.\n", "Повторный захват выводит только причину отказа")
-		code.text = "move('right')\nmove('right')\nmove('down')\nmove('down')\nput()"
+		code.text = "move('right')\nmove('right')\nmove('right')\nmove('down')\nmove('down')\nput()"
 		run.pressed.emit()
 		while executor.is_running:
 			await process_frame

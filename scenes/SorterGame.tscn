@@ -78,7 +78,7 @@ render_target_update_mode = 4
 script = ExtResource("4")
 
 [node name="Camera" type="Camera3D" parent="Layout/Field/Viewport/World"]
-position = Vector3(1.1, 12, 11)
+position = Vector3(2, 12, 11)
 rotation_degrees = Vector3(-53.1301, 0, 0)
 projection = 1
 size = 8.0
@@ -120,6 +120,12 @@ mesh = SubResource("FrameMesh")
 
 [node name="InputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
 position = Vector3(-1.49, -0.572, 0)
+
+[node name="OrangeOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
+position = Vector3(5.49, -0.572, 2)
+
+[node name="BlueOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
+position = Vector3(5.49, -0.572, 3)
 
 [node name="Robot" parent="Layout/Field/Viewport/World" instance=ExtResource("3")]
 position = Vector3(1, 0, 3)
@@ -189,6 +195,7 @@ move(\"up\")
 move(\"up\")
 move(\"left\")
 grab()
+move(\"right\")
 move(\"right\")
 move(\"right\")
 move(\"right\")

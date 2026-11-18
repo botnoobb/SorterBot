@@ -6,18 +6,24 @@ signal cargo_delivered()
 const FIELD_SIZE := 5
 const FLOOR_TILE := preload("res://assets/models/field/floor_tile.glb")
 const CARGO_CELL := Vector2i(0, 0)
-const ZONE_CELL := Vector2i(3, 2)
-const BLUE_ZONE_CELL := Vector2i(3, 3)
+const ZONE_CELL := Vector2i(4, 2)
+const BLUE_ZONE_CELL := Vector2i(4, 3)
 const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.02, CARGO_CELL.y)
 const INPUT_CARGO_START := Vector3(-2.24, 0.02, CARGO_CELL.y)
 const INPUT_FEED_DURATION := 1.1
+const OUTPUT_CARGO_START := Vector3(-0.75, 0.592, 0)
+const OUTPUT_CARGO_END := Vector3(0.97, 0.592, 0)
+const OUTPUT_FEED_DURATION := 0.8
 const CARRIED_CARGO_POSITION := Vector3(0, 0.75, 0)
-const BOX_COLORS := {"orange": Color(0.95, 0.65, 0.2), "blue": Color(0.25, 0.55, 0.95)}
 const CARGO_MODELS := {
 	"orange": preload("res://assets/models/cargo/parcel.glb"),
 	"blue": preload("res://assets/models/cargo/parcel_blue.glb"),
 }
 const ZONES_BY_COLOR := {"orange": ZONE_CELL, "blue": BLUE_ZONE_CELL}
+const ZONE_TILES := {
+	ZONE_CELL: preload("res://assets/models/field/direction_tile.glb"),
+	BLUE_ZONE_CELL: preload("res://assets/models/field/direction_tile_blue.glb"),
+}
 
 var carrying: bool = false
 # Результат доставки сохраняется до захвата следующей коробки.
@@ -28,6 +34,10 @@ var _box_color_name: String = "orange"
 var _robot_spawn_cell: Vector2i
 
 @onready var _robot: SorterRobot = $Robot
+@onready var _output_conveyors: Dictionary[Vector2i, Node3D] = {
+	ZONE_CELL: $OrangeOutputConveyor,
+	BLUE_ZONE_CELL: $BlueOutputConveyor,
+}
 
 
 func _ready() -> void:
@@ -36,7 +46,8 @@ func _ready() -> void:
 
 	for x: int in range(FIELD_SIZE):
 		for y: int in range(FIELD_SIZE):
-			var tile: Node3D = FLOOR_TILE.instantiate()
+			var tile_scene: PackedScene = ZONE_TILES.get(Vector2i(x, y), FLOOR_TILE)
+			var tile: Node3D = tile_scene.instantiate()
 			# Совмещаем поверхность плитки с уровнем движения робота.
 			tile.position = Vector3(x, -0.15, y)
 			tile.scale = Vector3(0.98, 1, 0.98)
@@ -45,7 +56,6 @@ func _ready() -> void:
 	_box(Vector3(CARGO_CELL.x, 0, CARGO_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.5, 0.9))
 	for color_name: String in ZONES_BY_COLOR:
 		var zone: Vector2i = ZONES_BY_COLOR[color_name]
-		_box(Vector3(zone.x, 0, zone.y), Vector3(0.9, 0.04, 0.9), BOX_COLORS[color_name])
 		_add_label(color_name, Vector3(zone.x, 0.1, zone.y - 0.5))
 	_add_label("Выдача", Vector3(CARGO_CELL.x, 0.1, CARGO_CELL.y - 0.5))
 	_spawn_cargo()
@@ -92,12 +102,15 @@ func perform(command: ProgramCommand, duration: float) -> String:
 		return "Неизвестное игровое действие."
 	var grabbing: bool = command.type == ProgramCommand.Type.GRAB
 	_cargo.reparent(_robot if grabbing else self)
-	var target_position := (
-			CARRIED_CARGO_POSITION if grabbing
-			else Vector3(_robot.cell.x + 0.4, CARGO_POSITION.y, _robot.cell.y)
-	)
 	var tween: Tween = create_tween()
-	tween.tween_property(_cargo, "position", target_position, duration)
+	if grabbing:
+		tween.tween_property(_cargo, "position", CARRIED_CARGO_POSITION, duration)
+	else:
+		var conveyor: Node3D = _output_conveyors[_robot.cell]
+		tween.tween_property(_cargo, "position", conveyor.transform * OUTPUT_CARGO_START, duration)
+		tween.tween_property(
+				_cargo, "position", conveyor.transform * OUTPUT_CARGO_END, OUTPUT_FEED_DURATION
+		)
 	await tween.finished
 	carrying = grabbing
 	delivered = not grabbing
