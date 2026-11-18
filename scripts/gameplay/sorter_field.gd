@@ -6,14 +6,19 @@ signal cargo_delivered()
 const CARGO_CELL := Vector2i(1, 2)
 const ZONE_CELL := Vector2i(3, 2)
 const BLUE_ZONE_CELL := Vector2i(3, 3)
-const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.3, CARGO_CELL.y)
+const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.02, CARGO_CELL.y)
+const CARRIED_CARGO_POSITION := Vector3(0, 0.75, 0)
 const BOX_COLORS := {"orange": Color(0.95, 0.65, 0.2), "blue": Color(0.25, 0.55, 0.95)}
+const CARGO_MODELS := {
+	"orange": preload("res://assets/models/cargo/parcel.glb"),
+	"blue": preload("res://assets/models/cargo/parcel_blue.glb"),
+}
 const ZONES_BY_COLOR := {"orange": ZONE_CELL, "blue": BLUE_ZONE_CELL}
 
 var carrying: bool = false
 # Результат доставки сохраняется до захвата следующей коробки.
 var delivered: bool = false
-var _cargo: MeshInstance3D
+var _cargo: Node3D
 var _box_color_name: String = "orange"
 var _robot_spawn_cell: Vector2i
 
@@ -32,7 +37,7 @@ func _ready() -> void:
 		_box(Vector3(zone.x, 0, zone.y), Vector3(0.9, 0.04, 0.9), BOX_COLORS[color_name])
 		_add_label(color_name, Vector3(zone.x, 0.1, zone.y - 0.5))
 	_add_label("Выдача", Vector3(CARGO_CELL.x, 0.1, CARGO_CELL.y - 0.5))
-	_cargo = _box(CARGO_POSITION, Vector3(0.45, 0.5, 0.45), BOX_COLORS[_box_color_name])
+	_spawn_cargo()
 
 
 func get_box_color() -> String:
@@ -73,7 +78,8 @@ func perform(command: ProgramCommand, duration: float) -> String:
 	var grabbing: bool = command.type == ProgramCommand.Type.GRAB
 	_cargo.reparent(_robot if grabbing else self)
 	var target_position := (
-			Vector3(0, 1, 0) if grabbing else Vector3(_robot.cell.x + 0.4, 0.3, _robot.cell.y)
+			CARRIED_CARGO_POSITION if grabbing
+			else Vector3(_robot.cell.x + 0.4, CARGO_POSITION.y, _robot.cell.y)
 	)
 	var tween: Tween = create_tween()
 	tween.tween_property(_cargo, "position", target_position, duration)
@@ -81,12 +87,19 @@ func perform(command: ProgramCommand, duration: float) -> String:
 	carrying = grabbing
 	delivered = not grabbing
 	if not grabbing:
-		_cargo.position = CARGO_POSITION
+		remove_child(_cargo)
+		_cargo.queue_free()
 		_box_color_name = "blue" if _box_color_name == "orange" else "orange"
-		var material: StandardMaterial3D = _cargo.mesh.material
-		material.albedo_color = BOX_COLORS[_box_color_name]
+		_spawn_cargo()
 		cargo_delivered.emit()
 	return ""
+
+
+func _spawn_cargo() -> void:
+	var model: PackedScene = CARGO_MODELS[_box_color_name]
+	_cargo = model.instantiate()
+	_cargo.position = CARGO_POSITION
+	add_child(_cargo)
 
 
 func _add_label(text: String, location: Vector3) -> void:

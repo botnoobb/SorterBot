@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bu64nutc1euff"
-path="res://.godot/imported/sorter_robot_v4.glb-4cdc2db862cc00dee8efddbb658cf7f8.scn"
+uid="uid://daw6617tel1fu"
+path="res://.godot/imported/direction_tile_blue.glb-701e49312880c363a88a8a6779687553.scn"
 
 [deps]
 
-source_file="res://assets/models/sorter_robot_v4.glb"
-dest_files=["res://.godot/imported/sorter_robot_v4.glb-4cdc2db862cc00dee8efddbb658cf7f8.scn"]
+source_file="res://assets/models/field/direction_tile_blue.glb"
+dest_files=["res://.godot/imported/direction_tile_blue.glb-701e49312880c363a88a8a6779687553.scn"]
 
 [params]
 

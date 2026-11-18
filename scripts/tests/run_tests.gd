@@ -1212,8 +1212,7 @@ func _test_reset_cargo() -> void:
 			game.queue_free()
 			await process_frame
 			return
-		var cargo: MeshInstance3D = field.get("_cargo")
-		var original_mesh: Mesh = cargo.mesh
+		var cargo: Node3D = field.get("_cargo")
 		var original_position: Vector3 = cargo.position
 		reset.pressed.emit()
 		_expect(not reset.disabled and cargo.position == original_position, "На выдаче коробка остаётся на месте, кнопка доступна")
@@ -1250,7 +1249,7 @@ func _test_reset_cargo() -> void:
 			await process_frame
 		_expect(not executor.is_paused, "Восстановление завершает запуск вместе с ожиданием шага")
 		_expect(robot.cell == Vector2i(1, 3) and robot.position == Vector3(1, 0, 3), "Робот возвращён на старт карты")
-		_expect(cargo == field.get("_cargo") and cargo.mesh == original_mesh, "Восстановлена та же коробка с прежним ресурсом")
+		_expect(cargo == field.get("_cargo"), "Восстановлена та же коробка")
 		_expect(cargo.get_parent() == field and cargo.position == original_position, "Коробка возвращена на выдачу")
 		_expect(not field.carrying and not field.delivered, "Груз снова доступен для захвата")
 		_expect(code.text == source, "Восстановление сохраняет текст программы")
@@ -1279,9 +1278,11 @@ func _test_reset_cargo() -> void:
 		_expect(field.delivered and not field.carrying, "Восстановление во время put сохраняет успешную доставку")
 		var goal: Label = game.get_node("Lesson/Content/Goal")
 		_expect(goal.text == "Коробка доставлена", "Результат доставки сохранён")
-		var delivered_position: Vector3 = cargo.position
+		var next_cargo: Node3D = field.get("_cargo")
 		reset.pressed.emit()
-		_expect(not reset.disabled and field.delivered and cargo.position == delivered_position, "После доставки кнопка доступна без отката результата")
+		_expect(not reset.disabled and field.delivered and next_cargo == field.get("_cargo")
+				and next_cargo.get_parent() == field and next_cargo.position == original_position,
+				"После доставки кнопка доступна без отката результата")
 		game.queue_free()
 		await process_frame
 	# Клетка появления берётся из карты, а не из фиксированных координат скрипта.
