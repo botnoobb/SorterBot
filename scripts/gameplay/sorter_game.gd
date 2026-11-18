@@ -10,8 +10,8 @@ const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
-# Размер проекции поля 5×5 вместе с местами для конвейеров.
-const FIELD_FRAME_SIZE := Vector2(9.6, 5.2)
+# Габариты проекции рамы и робота с коробкой на крайних клетках.
+const FIELD_PROJECTION_SIZE := Vector2(5.5, 5.0)
 const FIELD_FRAME_MARGIN := 8.0
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
@@ -186,7 +186,7 @@ func _frame_field() -> void:
 			reference_right, top, field_rect.size.x - reference_right, field_rect.size.y - top
 	)
 
-	# Выбираем область, в которой поле и места для конвейеров будут крупнее.
+	# Выбираем область, в которой поле будет крупнее.
 	var above_scale := _field_units_per_pixel(above_reference.size)
 	var beside_scale := _field_units_per_pixel(beside_reference.size)
 	var area := above_reference if above_scale <= beside_scale else beside_reference
@@ -200,7 +200,7 @@ func _frame_field() -> void:
 
 func _field_units_per_pixel(area_size: Vector2) -> float:
 	var available := (area_size - Vector2.ONE * FIELD_FRAME_MARGIN * 2.0).max(Vector2.ONE)
-	return maxf(FIELD_FRAME_SIZE.x / available.x, FIELD_FRAME_SIZE.y / available.y)
+	return maxf(FIELD_PROJECTION_SIZE.x / available.x, FIELD_PROJECTION_SIZE.y / available.y)
 
 
 func _sync_reference_top() -> void:
