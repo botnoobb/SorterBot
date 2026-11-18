@@ -98,13 +98,13 @@ var _cargo_reset_requested: bool = false
 var _field_zoom: float = 1.0
 var _field_pan := Vector2.ZERO
 var _field_drag_button: MouseButton = MOUSE_BUTTON_NONE
+var _field_drag_position := Vector2.ZERO
 
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
 @onready var _goal: Label = $Lesson/Content/Goal
 @onready var _layout: HSplitContainer = $Layout
 @onready var _field_view: Control = $Layout/Field
-@onready var _field_drag_cursor := Node2D.new()
 @onready var _camera: Camera3D = $Layout/Field/Viewport/World/Camera
 @onready var _lesson: PanelContainer = $Lesson
 @onready var _lesson_details: RichTextLabel = $Lesson/Content/Details
@@ -150,11 +150,6 @@ func _ready() -> void:
 	)
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
-	_field_drag_cursor.name = "FieldDragCursor"
-	_field_drag_cursor.z_index = 1
-	_field_drag_cursor.hide()
-	_field_drag_cursor.draw.connect(_draw_field_drag_cursor)
-	_field_view.add_child(_field_drag_cursor)
 	_field_view.gui_input.connect(_on_field_gui_input)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)
 	_editor.resized.connect(_resize_lesson, CONNECT_DEFERRED)
@@ -163,18 +158,15 @@ func _ready() -> void:
 	_resize_lesson.call_deferred()
 
 
-func _exit_tree() -> void:
-	_end_field_drag(false)
-
-
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
-		_end_field_drag(false)
+		_field_drag_button = MOUSE_BUTTON_NONE
 
 
 func _on_field_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and _field_drag_button != MOUSE_BUTTON_NONE:
-		_field_pan += event.relative
+		_field_pan += event.position - _field_drag_position
+		_field_drag_position = event.position
 		_frame_field()
 		_field_view.accept_event()
 	elif event is InputEventMouseButton:
@@ -188,34 +180,13 @@ func _on_field_gui_input(event: InputEvent) -> void:
 
 func _handle_field_drag_button(event: InputEventMouseButton) -> void:
 	if event.pressed and _field_drag_button == MOUSE_BUTTON_NONE:
-		# Захват скрывает системный указатель, поэтому рисуем его в точке нажатия.
+		if not Rect2(Vector2.ZERO, _field_view.size).has_point(event.position):
+			return
 		_field_drag_button = event.button_index
-		_field_drag_cursor.position = event.position
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		_field_drag_cursor.show()
+		_field_drag_position = event.position
 	elif not event.pressed and event.button_index == _field_drag_button:
-		_end_field_drag(true)
+		_field_drag_button = MOUSE_BUTTON_NONE
 	_field_view.accept_event()
-
-
-func _end_field_drag(restore_mouse_position: bool) -> void:
-	if _field_drag_button == MOUSE_BUTTON_NONE:
-		return
-	_field_drag_button = MOUSE_BUTTON_NONE
-	_field_drag_cursor.hide()
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	if restore_mouse_position:
-		get_viewport().warp_mouse(_field_drag_cursor.get_global_transform_with_canvas().origin)
-
-
-func _draw_field_drag_cursor() -> void:
-	var outline := PackedVector2Array([
-		Vector2.ZERO, Vector2(12, 12), Vector2(7, 12), Vector2(9, 17),
-		Vector2(6, 18), Vector2(4, 13), Vector2(0, 16),
-	])
-	_field_drag_cursor.draw_colored_polygon(outline, Color.WHITE)
-	outline.append(Vector2.ZERO)
-	_field_drag_cursor.draw_polyline(outline, Color.BLACK, 1.0, true)
 
 
 func _zoom_field(event: InputEventMouseButton) -> void:

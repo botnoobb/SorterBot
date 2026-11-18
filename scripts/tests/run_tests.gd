@@ -70,12 +70,27 @@ func _test_camera_drag() -> void:
 	await process_frame
 	var field_view: SubViewportContainer = game.get_node("Layout/Field")
 	var camera: Camera3D = field_view.get_node("Viewport/World/Camera")
-	var cursor: Node2D = field_view.get_node("FieldDragCursor")
 	var code := game.find_child("Code", true, false) as CodeEdit
-	var field_position := field_view.global_position + field_view.size * Vector2(0.9, 0.65)
+	var field_origin := field_view.global_position
+	var field_position := field_origin + field_view.size * Vector2(0.85, 0.65)
 	var editor_position := code.get_global_rect().get_center()
-	var field_center := Vector3(2, 0, 2)
-	var offset := Vector2(24, -16)
+	var moved_position := field_position + Vector2(24, -16)
+	const PROJECTION_DEPTH := 15.0
+	_push_mouse_button(field_position, MOUSE_BUTTON_LEFT, true)
+	_move_mouse_at(editor_position, editor_position - field_position, MOUSE_BUTTON_MASK_LEFT)
+	_push_mouse_button(editor_position, MOUSE_BUTTON_MIDDLE, true)
+	_push_mouse_button(editor_position, MOUSE_BUTTON_LEFT, false)
+	var point_after_release := camera.project_position(field_position - field_origin, PROJECTION_DEPTH)
+	_push_mouse_button(editor_position, MOUSE_BUTTON_LEFT, true)
+	_move_mouse_at(moved_position, moved_position - editor_position,
+			MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_MIDDLE)
+	_expect(
+			camera.unproject_position(point_after_release).distance_to(field_position - field_origin) < 1,
+			"Новый жест над редактором не начинается при удержании другой кнопки"
+	)
+	_push_mouse_button(moved_position, MOUSE_BUTTON_LEFT, false)
+	_push_mouse_button(moved_position, MOUSE_BUTTON_MIDDLE, false)
+
 	# Правая кнопка в редакторе открывает контекстное меню, поэтому проверяем её последней.
 	var buttons := {
 		MOUSE_BUTTON_LEFT: MOUSE_BUTTON_MASK_LEFT,
@@ -84,31 +99,32 @@ func _test_camera_drag() -> void:
 	}
 	for button: MouseButton in buttons:
 		var mask: MouseButtonMask = buttons[button]
-		var screen_center := camera.unproject_position(field_center)
+		var grabbed_point := camera.project_position(field_position - field_origin, PROJECTION_DEPTH)
 		_push_mouse_button(field_position, button, true)
-		_move_mouse_at(field_position, offset, mask)
+		_move_mouse_at(moved_position, moved_position - field_position, mask)
+		var projected_point := camera.unproject_position(grabbed_point)
 		_expect(
-			camera.unproject_position(field_center).distance_to(screen_center + offset) < 1.0,
-			"Поле следует за движением мыши с кнопкой %d" % button
+				projected_point.distance_to(moved_position - field_origin) < 1.0,
+				"Точка поля остаётся под движущимся указателем с кнопкой %d" % button
 		)
+		_move_mouse_at(editor_position, editor_position - moved_position, mask)
+		projected_point = camera.unproject_position(grabbed_point)
 		_expect(
-			cursor.is_visible_in_tree() and cursor.global_position.is_equal_approx(field_position),
-			"Видимый указатель остаётся в точке нажатия кнопки %d" % button
+				projected_point.distance_to(editor_position - field_origin) < 1.0,
+				"Жест кнопкой %d продолжается при выходе указателя за поле" % button
 		)
 		_push_mouse_button(editor_position, button, false)
-		screen_center = camera.unproject_position(field_center)
-		_move_mouse_at(field_position, offset, 0)
+		_move_mouse_at(field_position, field_position - editor_position, 0)
 		_expect(
-			camera.unproject_position(field_center).is_equal_approx(screen_center)
-			and not cursor.is_visible_in_tree(),
-			"Отпускание кнопки %d над редактором завершает жест" % button
+				camera.unproject_position(grabbed_point).is_equal_approx(projected_point),
+				"Отпускание кнопки %d над редактором завершает жест" % button
 		)
 		_push_mouse_button(editor_position, button, true)
-		_move_mouse_at(field_position, offset, mask)
+		_move_mouse_at(field_position, field_position - editor_position, mask)
 		_push_mouse_button(field_position, button, false)
 		_expect(
-			camera.unproject_position(field_center).is_equal_approx(screen_center),
-			"Нажатие кнопки %d в редакторе не перетаскивает поле" % button
+				camera.unproject_position(grabbed_point).is_equal_approx(projected_point),
+				"Нажатие кнопки %d в редакторе не перетаскивает поле" % button
 		)
 	game.queue_free()
 	await process_frame
