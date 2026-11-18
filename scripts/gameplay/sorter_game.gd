@@ -96,12 +96,15 @@ var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
 var _field_zoom: float = 1.0
+var _field_pan := Vector2.ZERO
+var _field_drag_button: MouseButton = MOUSE_BUTTON_NONE
 
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
 @onready var _goal: Label = $Lesson/Content/Goal
 @onready var _layout: HSplitContainer = $Layout
 @onready var _field_view: Control = $Layout/Field
+@onready var _field_drag_cursor := Node2D.new()
 @onready var _camera: Camera3D = $Layout/Field/Viewport/World/Camera
 @onready var _lesson: PanelContainer = $Lesson
 @onready var _lesson_details: RichTextLabel = $Lesson/Content/Details
@@ -147,6 +150,11 @@ func _ready() -> void:
 	)
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
+	_field_drag_cursor.name = "FieldDragCursor"
+	_field_drag_cursor.z_index = 1
+	_field_drag_cursor.hide()
+	_field_drag_cursor.draw.connect(_draw_field_drag_cursor)
+	_field_view.add_child(_field_drag_cursor)
 	_field_view.gui_input.connect(_on_field_gui_input)
 	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)
 	_editor.resized.connect(_resize_lesson, CONNECT_DEFERRED)
@@ -155,17 +163,63 @@ func _ready() -> void:
 	_resize_lesson.call_deferred()
 
 
+func _exit_tree() -> void:
+	_end_field_drag(false)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_end_field_drag(false)
+
+
 func _on_field_gui_input(event: InputEvent) -> void:
-	if not event is InputEventMouseButton or not event.pressed:
+	if event is InputEventMouseMotion and _field_drag_button != MOUSE_BUTTON_NONE:
+		_field_pan += event.relative
+		_frame_field()
+		_field_view.accept_event()
+	elif event is InputEventMouseButton:
+		match event.button_index:
+			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE:
+				_handle_field_drag_button(event)
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+				if event.pressed:
+					_zoom_field(event)
+
+
+func _handle_field_drag_button(event: InputEventMouseButton) -> void:
+	if event.pressed and _field_drag_button == MOUSE_BUTTON_NONE:
+		# Захват скрывает системный указатель, поэтому рисуем его в точке нажатия.
+		_field_drag_button = event.button_index
+		_field_drag_cursor.position = event.position
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_field_drag_cursor.show()
+	elif not event.pressed and event.button_index == _field_drag_button:
+		_end_field_drag(true)
+	_field_view.accept_event()
+
+
+func _end_field_drag(restore_mouse_position: bool) -> void:
+	if _field_drag_button == MOUSE_BUTTON_NONE:
 		return
-	var direction: float
-	match event.button_index:
-		MOUSE_BUTTON_WHEEL_UP:
-			direction = 1.0
-		MOUSE_BUTTON_WHEEL_DOWN:
-			direction = -1.0
-		_:
-			return
+	_field_drag_button = MOUSE_BUTTON_NONE
+	_field_drag_cursor.hide()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if restore_mouse_position:
+		get_viewport().warp_mouse(_field_drag_cursor.get_global_transform_with_canvas().origin)
+
+
+func _draw_field_drag_cursor() -> void:
+	var outline := PackedVector2Array([
+		Vector2.ZERO, Vector2(12, 12), Vector2(7, 12), Vector2(9, 17),
+		Vector2(6, 18), Vector2(4, 13), Vector2(0, 16),
+	])
+	_field_drag_cursor.draw_colored_polygon(outline, Color.WHITE)
+	outline.append(Vector2.ZERO)
+	_field_drag_cursor.draw_polyline(outline, Color.BLACK, 1.0, true)
+
+
+func _zoom_field(event: InputEventMouseButton) -> void:
+	var direction := 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0
 	var wheel_steps: float = event.factor if event.factor > 0.0 else 1.0
 	var zoom_multiplier: float = pow(FIELD_ZOOM_STEP, direction * wheel_steps)
 	_field_zoom = clampf(_field_zoom * zoom_multiplier, 1.0, FIELD_MAX_ZOOM)
@@ -223,7 +277,7 @@ func _frame_field() -> void:
 	var area := above_reference if above_scale <= beside_scale else beside_reference
 	var units_per_pixel := minf(above_scale, beside_scale) / _field_zoom
 
-	var offset := area.get_center() - field_rect.size * 0.5
+	var offset := area.get_center() - field_rect.size * 0.5 + _field_pan
 	_camera.size = field_rect.size.y * units_per_pixel
 	_camera.h_offset = -offset.x * units_per_pixel
 	_camera.v_offset = offset.y * units_per_pixel

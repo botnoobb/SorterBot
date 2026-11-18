@@ -22,12 +22,16 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
+	var camera_drag_requested := arguments.has("--camera-drag")
 	var camera_zoom_requested := arguments.has("--camera-zoom")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
+			or camera_drag_requested
 	):
-		if camera_zoom_requested:
+		if camera_drag_requested:
+			await _test_camera_drag()
+		elif camera_zoom_requested:
 			await _test_camera_zoom()
 		elif arguments.has("--syntax-highlighting"):
 			await _test_syntax_highlighting()
@@ -49,6 +53,7 @@ func _run() -> void:
 	await _test_diagnostics()
 	await _test_scene()
 	await _test_camera_zoom()
+	await _test_camera_drag()
 	await _test_reference_panel()
 	await _test_syntax_highlighting()
 	await _test_delivery()
@@ -56,6 +61,57 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_camera_drag() -> void:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	await process_frame
+	var field_view: SubViewportContainer = game.get_node("Layout/Field")
+	var camera: Camera3D = field_view.get_node("Viewport/World/Camera")
+	var cursor: Node2D = field_view.get_node("FieldDragCursor")
+	var code := game.find_child("Code", true, false) as CodeEdit
+	var field_position := field_view.global_position + field_view.size * Vector2(0.9, 0.65)
+	var editor_position := code.get_global_rect().get_center()
+	var field_center := Vector3(2, 0, 2)
+	var offset := Vector2(24, -16)
+	# Правая кнопка в редакторе открывает контекстное меню, поэтому проверяем её последней.
+	var buttons := {
+		MOUSE_BUTTON_LEFT: MOUSE_BUTTON_MASK_LEFT,
+		MOUSE_BUTTON_MIDDLE: MOUSE_BUTTON_MASK_MIDDLE,
+		MOUSE_BUTTON_RIGHT: MOUSE_BUTTON_MASK_RIGHT,
+	}
+	for button: MouseButton in buttons:
+		var mask: MouseButtonMask = buttons[button]
+		var screen_center := camera.unproject_position(field_center)
+		_push_mouse_button(field_position, button, true)
+		_move_mouse_at(field_position, offset, mask)
+		_expect(
+			camera.unproject_position(field_center).distance_to(screen_center + offset) < 1.0,
+			"Поле следует за движением мыши с кнопкой %d" % button
+		)
+		_expect(
+			cursor.is_visible_in_tree() and cursor.global_position.is_equal_approx(field_position),
+			"Видимый указатель остаётся в точке нажатия кнопки %d" % button
+		)
+		_push_mouse_button(editor_position, button, false)
+		screen_center = camera.unproject_position(field_center)
+		_move_mouse_at(field_position, offset, 0)
+		_expect(
+			camera.unproject_position(field_center).is_equal_approx(screen_center)
+			and not cursor.is_visible_in_tree(),
+			"Отпускание кнопки %d над редактором завершает жест" % button
+		)
+		_push_mouse_button(editor_position, button, true)
+		_move_mouse_at(field_position, offset, mask)
+		_push_mouse_button(field_position, button, false)
+		_expect(
+			camera.unproject_position(field_center).is_equal_approx(screen_center),
+			"Нажатие кнопки %d в редакторе не перетаскивает поле" % button
+		)
+	game.queue_free()
+	await process_frame
 
 
 func _test_camera_zoom() -> void:
@@ -116,10 +172,22 @@ func _is_field_in_view(camera: Camera3D) -> bool:
 
 
 func _scroll_at(position: Vector2, button: MouseButton) -> void:
+	_push_mouse_button(position, button, true)
+
+
+func _push_mouse_button(position: Vector2, button: MouseButton, pressed: bool) -> void:
 	var event := InputEventMouseButton.new()
 	event.position = position
 	event.button_index = button
-	event.pressed = true
+	event.pressed = pressed
+	root.push_input(event, true)
+
+
+func _move_mouse_at(position: Vector2, relative: Vector2, buttons: MouseButtonMask) -> void:
+	var event := InputEventMouseMotion.new()
+	event.position = position
+	event.relative = relative
+	event.button_mask = buttons
 	root.push_input(event, true)
 
 
