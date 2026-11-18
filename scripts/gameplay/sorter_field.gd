@@ -5,10 +5,12 @@ signal cargo_delivered()
 
 const FIELD_SIZE := 5
 const FLOOR_TILE := preload("res://assets/models/field/floor_tile.glb")
-const CARGO_CELL := Vector2i(1, 2)
+const CARGO_CELL := Vector2i(0, 0)
 const ZONE_CELL := Vector2i(3, 2)
 const BLUE_ZONE_CELL := Vector2i(3, 3)
 const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.02, CARGO_CELL.y)
+const INPUT_CARGO_START := Vector3(-2.24, 0.02, CARGO_CELL.y)
+const INPUT_FEED_DURATION := 1.1
 const CARRIED_CARGO_POSITION := Vector3(0, 0.75, 0)
 const BOX_COLORS := {"orange": Color(0.95, 0.65, 0.2), "blue": Color(0.25, 0.55, 0.95)}
 const CARGO_MODELS := {
@@ -21,6 +23,7 @@ var carrying: bool = false
 # Результат доставки сохраняется до захвата следующей коробки.
 var delivered: bool = false
 var _cargo: Node3D
+var _input_feed: Tween
 var _box_color_name: String = "orange"
 var _robot_spawn_cell: Vector2i
 
@@ -52,14 +55,16 @@ func get_box_color() -> String:
 	return _box_color_name
 
 
-func reset_current_cargo() -> void:
+func reset_current_cargo() -> bool:
 	_robot.cell = _robot_spawn_cell
 	_robot.position = Vector3(_robot_spawn_cell.x, 0, _robot_spawn_cell.y)
-	if not delivered:
-		if _cargo.get_parent() != self:
-			_cargo.reparent(self)
-		_cargo.position = CARGO_POSITION
-		carrying = false
+	if delivered or _input_feed.is_running():
+		return false
+	if _cargo.get_parent() != self:
+		_cargo.reparent(self)
+	_cargo.position = CARGO_POSITION
+	carrying = false
+	return true
 
 
 func perform(command: ProgramCommand, duration: float) -> String:
@@ -74,6 +79,8 @@ func perform(command: ProgramCommand, duration: float) -> String:
 			return "Робот уже несёт коробку."
 		if _robot.cell != CARGO_CELL:
 			return "На этой клетке нет коробки."
+		if _input_feed.is_running():
+			await _input_feed.finished
 	elif command.type == ProgramCommand.Type.PUT:
 		if not carrying:
 			return "У робота нет коробки."
@@ -106,8 +113,10 @@ func perform(command: ProgramCommand, duration: float) -> String:
 func _spawn_cargo() -> void:
 	var model: PackedScene = CARGO_MODELS[_box_color_name]
 	_cargo = model.instantiate()
-	_cargo.position = CARGO_POSITION
+	_cargo.position = INPUT_CARGO_START
 	add_child(_cargo)
+	_input_feed = create_tween()
+	_input_feed.tween_property(_cargo, "position", CARGO_POSITION, INPUT_FEED_DURATION)
 
 
 func _add_label(text: String, location: Vector3) -> void:

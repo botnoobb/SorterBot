@@ -1,5 +1,12 @@
 extends SceneTree
 
+const START_TO_INPUT := 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
+const INPUT_TO_ORANGE := (
+		'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
+)
+const ORANGE_TO_INPUT := 'move("up")\nmove("up")\nmove("left")\nmove("left")\nmove("left")\n'
+const DELIVER_ORANGE := START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + "put()"
+
 var _failures: int = 0
 var _checks: int = 0
 var _moves: Array[Vector2i] = []
@@ -200,7 +207,7 @@ func _test_functions() -> void:
 		field.cargo_delivered.connect(func() -> void: zones.append(robot.cell))
 		code.text = paragraphs[2] + "\n" + paragraphs[3]
 		run.pressed.emit()
-		var deadline := create_timer(12.0)
+		var deadline := create_timer(20.0)
 		while not stop.disabled and deadline.time_left > 0.0:
 			await process_frame
 		_expect(stop.disabled and zones == [Vector2i(3, 2), Vector2i(3, 3)],
@@ -339,13 +346,15 @@ func _test_while() -> void:
 			stop.pressed.emit()
 	)
 	code.text = (
-			'move("up")\nwhile True:\n    color = get_box_color()\n    grab()\n'
-			+ '    move("right")\n    move("right")\n    if color == "orange":\n'
+			START_TO_INPUT + 'while True:\n    color = get_box_color()\n    grab()\n'
+			+ '    move("right")\n    move("right")\n    move("right")\n'
+			+ '    move("down")\n    move("down")\n    if color == "orange":\n'
 			+ '        put()\n    else:\n        move("down")\n        put()\n'
-			+ '        move("up")\n    move("left")\n    move("left")'
+			+ '        move("up")\n    move("up")\n    move("up")\n'
+			+ '    move("left")\n    move("left")\n    move("left")'
 	)
 	run.pressed.emit()
-	deadline = create_timer(12.0)
+	deadline = create_timer(18.0)
 	while not stop.disabled and deadline.time_left > 0.0:
 		await process_frame
 	_expect(stop.disabled and zones == [SorterField.ZONE_CELL, SorterField.BLUE_ZONE_CELL],
@@ -380,9 +389,11 @@ func _test_conditions() -> void:
 		_expect(code.get_line_background_color(line - 1).a > 0, "Текущий шаг подсвечен")
 	)
 	code.text = (
-			'color = get_box_color()\nmove("up")\ngrab()\nmove("right")\nmove("right")\n'
+			"color = get_box_color()\n" + START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE
 			+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()'
 	)
+	var lines_before_branch: Array[int] = []
+	lines_before_branch.assign(range(1, 13))
 	for single_step: bool in [false, true]:
 		for orange: bool in [true, false]:
 			reset.pressed.emit()
@@ -393,20 +404,20 @@ func _test_conditions() -> void:
 			var condition_paused := false
 			while not stop.disabled and deadline.time_left > 0.0:
 				if single_step and not step.disabled:
-					if lines == [1, 2, 3, 4, 5, 6]:
+					if lines == lines_before_branch:
 						condition_paused = field.carrying
 					step.pressed.emit()
 				await process_frame
 			if single_step:
 				_expect(condition_paused, "После проверки if есть пауза перед командой ветви")
-			var expected: Array[int] = [1, 2, 3, 4, 5, 6]
-			expected.append_array([7] if orange else [9, 10])
+			var expected: Array[int] = lines_before_branch.duplicate()
+			expected.append_array([13] if orange else [15, 16])
 			_expect(lines == expected, "После if выполняются только строки выбранной ветви")
 			var zone := Vector2i(3, 2) if orange else Vector2i(3, 3)
 			_expect(stop.disabled and field.delivered and robot.cell == zone,
 					"Коробка доставлена в зону своего цвета")
 	reset.pressed.emit()
-	code.text = 'move("up")\ngrab()\nmove("right")\nmove("right")\nmove("down")\nput()'
+	code.text = START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + 'move("down")\nput()'
 	run.pressed.emit()
 	var deadline := create_timer(5.0)
 	while not stop.disabled and deadline.time_left > 0.0:
@@ -447,7 +458,7 @@ func _test_variables() -> void:
 	code.text = (
 			"color = get_box_color()\nsaved = color\n"
 			+ 'color = "blue"\nprint(saved)\nprint(color)\n'
-			+ "move('up')\ngrab()\nprint(get_box_color())"
+			+ START_TO_INPUT + "grab()\nprint(get_box_color())"
 	)
 	step.pressed.emit()
 	var deadline := create_timer(8.0)
@@ -616,7 +627,7 @@ func _test_first_lesson() -> void:
 
 	var toggle: Button = lesson.get_node("Content/Header/Toggle")
 	var details: RichTextLabel = lesson.get_node("Content/Details")
-	var delivery_program := 'move("up")\ngrab()\nmove("right")\nmove("right")\nput()'
+	var delivery_program := DELIVER_ORANGE
 	var field: Control = game.get_node("Layout/Field")
 	var field_rect := field.get_global_rect()
 	_expect(not details.visible and not toggle.button_pressed, "Задание изначально свёрнуто")
@@ -686,13 +697,14 @@ func _play_first_lesson(game: Control, goal: Label, delivery_program: String) ->
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
 	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
+	var first_step_cell: Vector2i = robot.cell + Vector2i.UP
 
 	code.text = 'move("up")'
 	step.pressed.emit()
 	_expect(code.get_line_background_color(0).a > 0, "Первый шаг подсвечивает команду")
 	while not stop.disabled:
 		await process_frame
-	_expect(robot.cell == SorterField.CARGO_CELL, "Первый шаг ведёт к коробке")
+	_expect(robot.cell == first_step_cell, "Первый шаг ведёт к коробке")
 	reset.pressed.emit()
 	code.text = 'move("north")'
 	run.pressed.emit()
@@ -703,12 +715,12 @@ func _play_first_lesson(game: Control, goal: Label, delivery_program: String) ->
 	stop.pressed.emit()
 	while not stop.disabled:
 		await process_frame
-	_expect(robot.cell == SorterField.CARGO_CELL, "Стоп завершает только текущую команду")
+	_expect(robot.cell == first_step_cell, "Стоп завершает только текущую команду")
 	reset.pressed.emit()
 	step.pressed.emit()
 	while step.disabled:
 		await process_frame
-	_expect(robot.cell == SorterField.CARGO_CELL, "После первой команды программа на паузе")
+	_expect(robot.cell == first_step_cell, "После первой команды программа на паузе")
 	run.pressed.emit()
 	while not stop.disabled:
 		await process_frame
@@ -1029,8 +1041,7 @@ func _test_scene() -> void:
 	var delivery_cells: Array[Vector2i] = []
 	field.cargo_delivered.connect(func() -> void: delivery_cells.append(robot.cell))
 	code.text = (
-			"move('up')\ngrab()\nmove('right')\nmove('right')\nput()\n"
-			+ "move('left')\nmove('left')\ngrab()\nmove('right')\nmove('right')\n"
+			DELIVER_ORANGE + "\n" + ORANGE_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE
 			+ "move('down')\nput()\n"
 			+ "print('Готово')"
 	)
@@ -1098,15 +1109,20 @@ func _test_delivery() -> void:
 	for source: String in ["grab()", "put()"]:
 		await executor.run(parser.parse(source), robot.move, self, false, field.perform)
 		_expect(not executor.action_error.is_empty(), "Неверное действие отклонено: " + source)
-	await executor.run(parser.parse("move('up')\ngrab()\nput()"), robot.move, self, false, field.perform)
+	await executor.run(
+			parser.parse(START_TO_INPUT + "grab()\nput()"), robot.move, self, false, field.perform
+	)
 	_expect(field.carrying and not field.delivered, "Отказ положить вне зоны сохраняет коробку у робота")
 	await executor.run(parser.parse("grab()"), robot.move, self, false, field.perform)
 	_expect(field.carrying and not executor.action_error.is_empty(), "Повторный захват отклонён")
 	await executor.run(parser.parse("move('left')\nmove('left')"), robot.move, self, false, field.perform)
-	_expect(robot.cell == Vector2i(0, 2) and field.carrying, "Граница сохраняет позицию и груз")
-	var commands: Array[ProgramCommand] = parser.parse("move('right')\nmove('right')\nmove('right')\nput()")
+	_expect(
+			robot.cell == SorterField.CARGO_CELL and field.carrying,
+			"Граница сохраняет позицию и груз"
+	)
+	var commands: Array[ProgramCommand] = parser.parse(INPUT_TO_ORANGE + "put()")
 	executor.run(commands, robot.move, self, true, field.perform)
-	for index: int in range(3):
+	for index: int in range(5):
 		while executor.is_running and not executor.is_paused:
 			await process_frame
 		_expect(executor.is_paused and not field.delivered, "Переноска по шагам не засчитывает доставку")
@@ -1145,11 +1161,11 @@ func _test_wrong_delivery() -> void:
 				await process_frame
 			_expect(output.visible and messages.get_parsed_text() == sample[1], "Игровой отказ раскрывает панель и выводится без префикса")
 		editor.clear_output()
-		code.text = "move('up')\ngrab()\nput()\nprint('После отказа')\nmove('right')"
+		code.text = START_TO_INPUT + "grab()\nput()\nprint('После отказа')\nmove('right')"
 		_expect(not output.visible, "Перед ошибкой доставки панель скрыта")
 		if single_step:
 			step.pressed.emit()
-			for index: int in range(2):
+			for index: int in range(5):
 				while executor.is_running and not executor.is_paused:
 					await process_frame
 				_expect(executor.is_paused, "До ошибки доставки шаг ожидает нажатия")
@@ -1169,10 +1185,14 @@ func _test_wrong_delivery() -> void:
 		await process_frame
 		_expect(not executor.is_running and robot.cell == SorterField.CARGO_CELL, "Ошибочный запуск нельзя продолжить")
 		# Кнопка «Шаг» после отказа начинает программу с первой инструкции.
+		code.text = "move('right')\nprint('Не выполнять')"
 		step.pressed.emit()
 		while executor.is_running and not executor.is_paused:
 			await process_frame
-		_expect(robot.cell == SorterField.CARGO_CELL + Vector2i.UP, "Шаг после отказа начинает новый запуск")
+		_expect(
+				robot.cell == SorterField.CARGO_CELL + Vector2i.RIGHT,
+				"Шаг после отказа начинает новый запуск"
+		)
 		executor.request_stop()
 		while executor.is_running:
 			await process_frame
@@ -1181,7 +1201,7 @@ func _test_wrong_delivery() -> void:
 		while executor.is_running:
 			await process_frame
 		_expect(messages.get_parsed_text() == "Робот уже несёт коробку.\n", "Повторный захват выводит только причину отказа")
-		code.text = "move('down')\nmove('right')\nmove('right')\nput()"
+		code.text = "move('right')\nmove('right')\nmove('down')\nmove('down')\nput()"
 		run.pressed.emit()
 		while executor.is_running:
 			await process_frame
@@ -1197,7 +1217,7 @@ func _test_reset_cargo() -> void:
 	for scenario: int in range(5):
 		var game: Control = packed.instantiate()
 		root.add_child(game)
-		await process_frame
+		await create_timer(SorterField.INPUT_FEED_DURATION + 0.1).timeout
 		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 		var robot: SorterRobot = field.get_node("Robot")
 		var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
@@ -1216,16 +1236,16 @@ func _test_reset_cargo() -> void:
 		var original_position: Vector3 = cargo.position
 		reset.pressed.emit()
 		_expect(not reset.disabled and cargo.position == original_position, "На выдаче коробка остаётся на месте, кнопка доступна")
-		var source: String = "move('up')\ngrab()\nmove('right')\nprint('Нельзя продолжить')"
+		var source: String = START_TO_INPUT + "grab()\nmove('right')\nprint('Нельзя продолжить')"
 		if scenario == 3:
 			source = "print('Сохранить')\nmove('right')"
 		code.text = source
 		if scenario == 4:
 			step.pressed.emit()
-			for index: int in range(2):
+			for index: int in range(5):
 				while executor.is_running and not executor.is_paused:
 					await process_frame
-				if index == 0:
+				if index < 4:
 					step.pressed.emit()
 		else:
 			run.pressed.emit()
@@ -1259,11 +1279,11 @@ func _test_reset_cargo() -> void:
 		_expect(not executor.is_running and robot.cell == Vector2i(1, 3), "Старый запуск не продолжается после восстановления")
 		_expect(code.get_line_background_color(0).a == 0, "Подсветка выполнения снята")
 		# Исправление после неверной сдачи не теряется при восстановлении.
-		code.text = "move('up')\ngrab()\nput()"
+		code.text = START_TO_INPUT + "grab()\nput()"
 		run.pressed.emit()
 		while executor.is_running:
 			await process_frame
-		code.text = "move('up')\ngrab()\nmove('right')\nmove('right')\nput()"
+		code.text = DELIVER_ORANGE
 		var fixed_source: String = code.text
 		reset.pressed.emit()
 		_expect(code.text == fixed_source and not field.carrying, "После ошибки восстановление сохраняет исправленный код")
@@ -1279,9 +1299,10 @@ func _test_reset_cargo() -> void:
 		var goal: Label = game.get_node("Lesson/Content/Goal")
 		_expect(goal.text == "Коробка доставлена", "Результат доставки сохранён")
 		var next_cargo: Node3D = field.get("_cargo")
+		var feed_position: Vector3 = next_cargo.position
 		reset.pressed.emit()
 		_expect(not reset.disabled and field.delivered and next_cargo == field.get("_cargo")
-				and next_cargo.get_parent() == field and next_cargo.position == original_position,
+				and next_cargo.get_parent() == field and next_cargo.position == feed_position,
 				"После доставки кнопка доступна без отката результата")
 		game.queue_free()
 		await process_frame

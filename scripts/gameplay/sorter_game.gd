@@ -10,8 +10,8 @@ const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
-# Габариты проекции рамы и робота с коробкой на крайних клетках.
-const FIELD_PROJECTION_SIZE := Vector2(5.5, 5.0)
+# Габариты проекции рамы, входного конвейера и робота с коробкой.
+const FIELD_PROJECTION_SIZE := Vector2(7.4, 5.0)
 const FIELD_FRAME_MARGIN := 8.0
 const MOVEMENT_REFERENCE := (
 		"Движение\n\nmove(направление) перемещает робота на одну клетку. "
@@ -21,8 +21,8 @@ const MOVEMENT_REFERENCE := (
 const CARGO_REFERENCE := (
 		"Работа с коробкой\n\ngrab() берёт коробку на клетке выдачи. "
 		+ "put() кладёт её в зоне доставки.\n\n"
-		+ 'Пример со старта:\nmove("up")\ngrab()\n'
-		+ 'move("right")\nmove("right")\nput()\n\n'
+		+ 'Пример со старта:\nmove("up")\nmove("up")\nmove("up")\nmove("left")\ngrab()\n'
+		+ 'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\nput()\n\n'
 		+ 'Для коробки blue добавьте move("down") перед put().'
 )
 const OUTPUT_REFERENCE := (
@@ -38,7 +38,8 @@ const CONDITIONS_REFERENCE := (
 		"Условия\n\nДоставьте коробку в зону её цвета. "
 		+ 'if сравнивает color с "orange". Если значения совпадают, выполнится первый блок. '
 		+ "Иначе робот выполнит команды под else. Команды внутри ветвей пишутся с отступом.\n\n"
-		+ 'color = get_box_color()\nmove("up")\ngrab()\nmove("right")\nmove("right")\n'
+		+ 'color = get_box_color()\nmove("up")\nmove("up")\nmove("up")\nmove("left")\ngrab()\n'
+		+ 'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
 		+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()\n\n'
 		+ "Попробуйте обе коробки. В режиме «Шаг» строка if подсветится отдельно "
 		+ "перед первой командой выбранной ветви."
@@ -46,10 +47,13 @@ const CONDITIONS_REFERENCE := (
 const WHILE_REFERENCE := (
 		"Цикл while\n\nДоставьте две коробки одним запуском. Цикл повторяет доставку "
 		+ "и возвращает робота на выдачу. После второй доставки нажмите «Стоп».\n\n"
-		+ 'move("up")\nwhile True:\n    color = get_box_color()\n    grab()\n'
-		+ '    move("right")\n    move("right")\n    if color == "orange":\n'
+		+ 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
+		+ 'while True:\n    color = get_box_color()\n    grab()\n'
+		+ '    move("right")\n    move("right")\n    move("right")\n'
+		+ '    move("down")\n    move("down")\n    if color == "orange":\n'
 		+ '        put()\n    else:\n        move("down")\n        put()\n'
-		+ '        move("up")\n    move("left")\n    move("left")\n\n'
+		+ '        move("up")\n    move("up")\n    move("up")\n'
+		+ '    move("left")\n    move("left")\n    move("left")\n\n'
 		+ 'Условие проверяется перед каждым повтором. Сравнение вроде state == "repeat" '
 		+ "позволяет выйти из цикла, когда значение изменится.\n\n"
 		+ "Попробуйте while True с командой pass внутри. Робот не двигается, "
@@ -61,10 +65,12 @@ const FUNCTIONS_REFERENCE := (
 		+ "в функцию deliver. Строка def задаёт имя, а инструкции с отступом образуют тело. "
 		+ "Каждый вызов deliver() выполняет тело заново.\n\n"
 		+ "def deliver():\n    color = get_box_color()\n    grab()\n"
-		+ '    move("right")\n    move("right")\n    if color == "orange":\n'
+		+ '    move("right")\n    move("right")\n    move("right")\n'
+		+ '    move("down")\n    move("down")\n    if color == "orange":\n'
 		+ '        put()\n    else:\n        move("down")\n        put()\n'
-		+ '        move("up")\n    move("left")\n    move("left")\n\n'
-		+ 'move("up")\ndeliver()\ndeliver()\n\n'
+		+ '        move("up")\n    move("up")\n    move("up")\n'
+		+ '    move("left")\n    move("left")\n    move("left")\n\n'
+		+ 'move("up")\nmove("up")\nmove("up")\nmove("left")\ndeliver()\ndeliver()\n\n'
 		+ "Попробуйте режим «Шаг». После подсветки deliver() следующий шаг начнёт тело, "
 		+ "а после последней инструкции выполнение продолжится после вызова. "
 		+ "Присваивание внутри функции создаёт локальную переменную.\n\n"
@@ -77,8 +83,10 @@ const FUNCTIONS_REFERENCE := (
 		+ "return завершает функцию и передаёт результат в zone. Пустой return и "
 		+ "конец тела возвращают None. Перезапустите сцену перед примером.\n\n"
 		+ 'def choose_zone(color):\n    if color == "orange":\n        return "orange"\n'
-		+ '    return "blue"\nmove("up")\ncolor = get_box_color()\nzone = choose_zone(color)\n'
-		+ 'grab()\nmove("right")\nmove("right")\nif zone == "blue":\n    move("down")\nput()'
+		+ '    return "blue"\nmove("up")\nmove("up")\nmove("up")\nmove("left")\n'
+		+ 'color = get_box_color()\nzone = choose_zone(color)\ngrab()\n'
+		+ 'move("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
+		+ 'if zone == "blue":\n    move("down")\nput()'
 )
 
 var _parser := ProgramParser.new()
@@ -316,9 +324,11 @@ func _on_cargo_reset_requested() -> void:
 
 
 func _reset_current_cargo() -> void:
-	_field.reset_current_cargo()
+	var cargo_reset: bool = _field.reset_current_cargo()
 	_editor.clear_execution_line()
-	_editor.show_message("Робот возвращён на старт." if _field.delivered else "Текущий груз возвращён на выдачу.")
+	_editor.show_message(
+			"Текущий груз возвращён на выдачу." if cargo_reset else "Робот возвращён на старт."
+	)
 	_cargo_reset_requested = false
 
 
