@@ -8,9 +8,8 @@ const FLOOR_TILE := preload("res://assets/models/field/floor_tile.glb")
 const CARGO_CELL := Vector2i(0, 0)
 const ZONE_CELL := Vector2i(4, 2)
 const BLUE_ZONE_CELL := Vector2i(4, 3)
-const CARGO_POSITION := Vector3(CARGO_CELL.x + 0.4, 0.02, CARGO_CELL.y)
-const INPUT_CARGO_START := Vector3(-2.24, 0.02, CARGO_CELL.y)
-const INPUT_FEED_DURATION := 1.1
+const INPUT_FEED_DURATION := 2.75
+const INPUT_DROP_DURATION := 0.35
 const OUTPUT_CARGO_START := Vector3(-0.75, 0.592, 0)
 const OUTPUT_CARGO_END := Vector3(0.97, 0.592, 0)
 const OUTPUT_FEED_DURATION := 0.8
@@ -33,6 +32,9 @@ var _input_feed: Tween
 var _box_color_name: String = "orange"
 
 @onready var _robot: SorterRobot = $Robot
+@onready var _input_start: Marker3D = $InputConveyor/CargoStart
+@onready var _input_drop_start: Marker3D = $InputConveyor/DropStart
+@onready var _input_landing: Marker3D = $InputConveyor/InputTray/CargoLanding
 @onready var _output_conveyors: Dictionary[Vector2i, Node3D] = {
 	ZONE_CELL: $OrangeOutputConveyor,
 	BLUE_ZONE_CELL: $BlueOutputConveyor,
@@ -67,7 +69,7 @@ func reset_current_cargo() -> bool:
 		return false
 	if _cargo.get_parent() != self:
 		_cargo.reparent(self)
-	_cargo.position = CARGO_POSITION
+	_cargo.position = to_local(_input_landing.global_position)
 	carrying = false
 	return true
 
@@ -121,10 +123,22 @@ func perform(command: ProgramCommand, duration: float) -> String:
 func _spawn_cargo() -> void:
 	var model: PackedScene = CARGO_MODELS[_box_color_name]
 	_cargo = model.instantiate()
-	_cargo.position = INPUT_CARGO_START
+	_cargo.position = to_local(_input_start.global_position)
 	add_child(_cargo)
+	var drop_start: Vector3 = to_local(_input_drop_start.global_position)
+	var landing: Vector3 = to_local(_input_landing.global_position)
 	_input_feed = create_tween()
-	_input_feed.tween_property(_cargo, "position", CARGO_POSITION, INPUT_FEED_DURATION)
+	_input_feed.tween_property(
+			_cargo, "position", drop_start, INPUT_FEED_DURATION - INPUT_DROP_DURATION
+	)
+	# После края ленты горизонтальная скорость постоянна, а падение ускоряется.
+	_input_feed.tween_method(
+			func(progress: float) -> void:
+				var drop_position := drop_start.lerp(landing, progress)
+				drop_position.y = lerpf(drop_start.y, landing.y, progress * progress)
+				_cargo.position = drop_position,
+			0.0, 1.0, INPUT_DROP_DURATION
+	)
 
 
 func _add_label(text: String, location: Vector3) -> void:

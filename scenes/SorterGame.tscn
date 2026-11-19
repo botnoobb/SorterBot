@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_field.gd" id="4"]
 [ext_resource type="Theme" path="res://assets/editor_theme.tres" id="5"]
 [ext_resource type="PackedScene" path="res://assets/models/field/conveyor.glb" id="6"]
+[ext_resource type="PackedScene" path="res://assets/models/field/tray_orange.glb" id="7"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1
@@ -119,7 +120,19 @@ scale = Vector3(0.22, 0.24, 1)
 mesh = SubResource("FrameMesh")
 
 [node name="InputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
-position = Vector3(-1.49, -0.572, 0)
+position = Vector3(-2.516, -0.294, 0)
+
+[node name="CargoStart" type="Marker3D" parent="Layout/Field/Viewport/World/InputConveyor"]
+position = Vector3(-0.75, 0.592, 0)
+
+[node name="DropStart" type="Marker3D" parent="Layout/Field/Viewport/World/InputConveyor"]
+position = Vector3(1.193, 0.592, 0)
+
+[node name="InputTray" parent="Layout/Field/Viewport/World/InputConveyor" instance=ExtResource("7")]
+position = Vector3(0.993, 0.551, 0)
+
+[node name="CargoLanding" type="Marker3D" parent="Layout/Field/Viewport/World/InputConveyor/InputTray"]
+position = Vector3(0.423, -0.046, 0)
 
 [node name="OrangeOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
 position = Vector3(5.49, -0.572, 2)

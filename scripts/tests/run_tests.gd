@@ -24,14 +24,17 @@ func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
 	var robot_turns_requested := arguments.has("--robot-turns")
 	var delivery_requested := arguments.has("--delivery")
+	var input_tray_requested := arguments.has("--input-tray")
 	var camera_drag_requested := arguments.has("--camera-drag")
 	var camera_zoom_requested := arguments.has("--camera-zoom")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
-			or camera_drag_requested or robot_turns_requested or delivery_requested
+			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
 	):
-		if delivery_requested:
+		if input_tray_requested:
+			await _test_input_tray()
+		elif delivery_requested:
 			await _test_delivery()
 		elif robot_turns_requested:
 			await _test_robot_turns()
@@ -64,6 +67,7 @@ func _run() -> void:
 	await _test_reference_panel()
 	await _test_syntax_highlighting()
 	await _test_delivery()
+	await _test_input_tray()
 	await _test_wrong_delivery()
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
@@ -1396,6 +1400,68 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_failures += 1
 		push_error(message)
+
+
+func _test_input_tray() -> void:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	var content: Control = game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	var cargo_scene: PackedScene = SorterField.CARGO_MODELS[field.get_box_color()]
+	var cargo: Node3D = _find_scene_instance(field, cargo_scene.resource_path)
+	var landing_marker: Marker3D = field.get_node("InputConveyor/InputTray/CargoLanding")
+	var landing: Vector3 = field.to_local(landing_marker.global_position)
+	var belt_height: float = cargo.position.y
+	await create_timer(0.1).timeout
+	var position_before_reset: Vector3 = cargo.position
+	reset.pressed.emit()
+	_expect(cargo.position == position_before_reset, "Сброс сохраняет ход подачи коробки")
+	var saw_drop := false
+	var deadline: SceneTreeTimer = create_timer(4.0)
+	while not cargo.position.is_equal_approx(landing) and deadline.time_left > 0.0:
+		saw_drop = saw_drop or cargo.position.y < belt_height - 0.02
+		await process_frame
+	_expect(
+			saw_drop and cargo.position.is_equal_approx(landing),
+			"Коробка опускается с ленты и остаётся в точке захвата в лотке"
+	)
+
+	code.text = DELIVER_ORANGE
+	run.pressed.emit()
+	deadline = create_timer(8.0)
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	_expect(stop.disabled and field.delivered, "После доставки запускается следующая подача")
+	if not stop.disabled or not field.delivered:
+		game.queue_free()
+		await process_frame
+		return
+
+	cargo_scene = SorterField.CARGO_MODELS[field.get_box_color()]
+	cargo = _find_scene_instance(field, cargo_scene.resource_path)
+	code.text = ORANGE_TO_INPUT + "grab()"
+	run.pressed.emit()
+	var waited_for_cargo := false
+	deadline = create_timer(5.0)
+	while not stop.disabled and deadline.time_left > 0.0:
+		if (robot.cell == SorterField.CARGO_CELL and cargo.get_parent() == field
+				and not cargo.position.is_equal_approx(landing)):
+			waited_for_cargo = true
+		await process_frame
+	_expect(waited_for_cargo, "Ранний grab ждёт коробку на клетке выдачи")
+	_expect(stop.disabled and field.carrying and cargo.get_parent() == robot, "Захват ждёт падения")
+	reset.pressed.emit()
+	_expect(
+			cargo.get_parent() == field and cargo.position.is_equal_approx(landing) and not field.carrying,
+			"Сброс возвращает захваченную коробку в лоток"
+	)
+	game.queue_free()
+	await process_frame
 
 
 func _test_delivery() -> void:

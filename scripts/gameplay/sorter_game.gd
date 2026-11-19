@@ -11,7 +11,8 @@ const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
 # Габариты проекции рамы, конвейеров и робота с коробкой.
-const FIELD_PROJECTION_SIZE := Vector2(9.2, 5.0)
+const FIELD_PROJECTION_SIZE := Vector2(10.1, 5.0)
+const FIELD_PROJECTION_CENTER_X_OFFSET := -0.51
 const FIELD_FRAME_MARGIN := 8.0
 const FIELD_MAX_ZOOM := 2.0
 const FIELD_ZOOM_STEP := 1.125
@@ -250,7 +251,8 @@ func _frame_field() -> void:
 
 	var offset := area.get_center() - field_rect.size * 0.5 + _field_pan
 	_camera.size = field_rect.size.y * units_per_pixel
-	_camera.h_offset = -offset.x * units_per_pixel
+	# Входной конвейер удлиняет кадр влево. Центр клеток остаётся опорой зума.
+	_camera.h_offset = FIELD_PROJECTION_CENTER_X_OFFSET / _field_zoom - offset.x * units_per_pixel
 	_camera.v_offset = offset.y * units_per_pixel
 
 
