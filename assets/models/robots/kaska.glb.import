@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://81n1cekj2bkx"
-path="res://.godot/imported/kaska.glb-c8e77f9988e83da5fc4714ffa48cd7c4.scn"
+path="res://.godot/imported/kaska.glb-0b4147336d1d68512eb5901d853cbf79.scn"
 
 [deps]
 
 source_file="res://assets/models/robots/kaska.glb"
-dest_files=["res://.godot/imported/kaska.glb-c8e77f9988e83da5fc4714ffa48cd7c4.scn"]
+dest_files=["res://.godot/imported/kaska.glb-0b4147336d1d68512eb5901d853cbf79.scn"]
 
 [params]
 

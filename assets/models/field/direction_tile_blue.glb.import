@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://daw6617tel1fu"
-path="res://.godot/imported/direction_tile_blue.glb-701e49312880c363a88a8a6779687553.scn"
+path="res://.godot/imported/direction_tile_blue.glb-263ca5d736a6ab880c246cbb6faee431.scn"
 
 [deps]
 
 source_file="res://assets/models/field/direction_tile_blue.glb"
-dest_files=["res://.godot/imported/direction_tile_blue.glb-701e49312880c363a88a8a6779687553.scn"]
+dest_files=["res://.godot/imported/direction_tile_blue.glb-263ca5d736a6ab880c246cbb6faee431.scn"]
 
 [params]
 

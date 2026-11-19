@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://do6avkm2nvqu4"
-path="res://.godot/imported/parcel.glb-340b188ca99989e320187e21ae0d3cd9.scn"
+path="res://.godot/imported/parcel.glb-7e8707d93da99dbb639bf961840f3870.scn"
 
 [deps]
 
 source_file="res://assets/models/cargo/parcel.glb"
-dest_files=["res://.godot/imported/parcel.glb-340b188ca99989e320187e21ae0d3cd9.scn"]
+dest_files=["res://.godot/imported/parcel.glb-7e8707d93da99dbb639bf961840f3870.scn"]
 
 [params]
 

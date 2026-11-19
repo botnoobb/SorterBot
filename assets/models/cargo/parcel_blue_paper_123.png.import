@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://j1c82tdrl4u5"
-path.s3tc="res://.godot/imported/parcel_blue_paper_123.png-9a29808f4a63673ffce6b60747a2dde8.s3tc.ctex"
+path.s3tc="res://.godot/imported/parcel_blue_paper_123.png-9c06f2251de43bb4c574298aeb655b8e.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -15,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/cargo/parcel_blue_paper_123.png"
-dest_files=["res://.godot/imported/parcel_blue_paper_123.png-9a29808f4a63673ffce6b60747a2dde8.s3tc.ctex"]
+dest_files=["res://.godot/imported/parcel_blue_paper_123.png-9c06f2251de43bb4c574298aeb655b8e.s3tc.ctex"]
 
 [params]
 

@@ -1,0 +1,37 @@
+name: Godot tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Запустить тесты Godot
+        shell: pwsh
+        run: |
+          $version = '4.7.2-stable'
+          $executable = "Godot_v${version}_win64.exe"
+          $archive = Join-Path $env:RUNNER_TEMP "$executable.zip"
+          $engineDirectory = Join-Path $env:RUNNER_TEMP 'godot'
+          $release = "https://github.com/godotengine/godot-builds/releases/download/$version"
+
+          Invoke-WebRequest -Uri "$release/$executable.zip" -OutFile $archive
+          $expectedHash = '731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expectedHash) {
+            throw 'Контрольная сумма архива Godot не совпадает.'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $engineDirectory
+          ./scripts/tests/run_tests.ps1 -GodotPath (Join-Path $engineDirectory $executable)

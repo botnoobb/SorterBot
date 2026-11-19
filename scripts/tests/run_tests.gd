@@ -1366,12 +1366,18 @@ func _test_delivery() -> void:
 	var model_pose: Transform3D
 	if model != null:
 		model_pose = robot.global_transform.affine_inverse() * model.global_transform
-		var bounds: AABB = _get_mesh_bounds(model)
-		_expect(
-				bounds.has_volume() and bounds.size.x < 1.0 and bounds.size.z < 1.0,
-				"Модель Штабеля помещается на клетке"
-		)
-		_expect(absf(bounds.position.y - 0.01) < 0.002, "Гусеницы стоят на поверхности плитки")
+		var body := model.find_child("Body_LowerShell", true, false) as MeshInstance3D
+		_expect(body != null, "У модели Штабеля виден корпус")
+		if body != null:
+			var bounds: AABB = body.global_transform * body.get_aabb()
+			var center: Vector3 = bounds.get_center()
+			_expect(bounds.size.x < 1.0 and bounds.size.z < 1.0, "Корпус помещается на клетке")
+			_expect(
+					Vector2(center.x, center.z).is_equal_approx(Vector2(robot.cell)),
+					"Середина корпуса совпадает с центром клетки"
+			)
+		var model_bounds: AABB = _get_mesh_bounds(model)
+		_expect(absf(model_bounds.position.y - 0.01) < 0.002, "Гусеницы стоят на поверхности плитки")
 	var parser := ProgramParser.new()
 	var executor := ProgramExecutor.new()
 	for source: String in ["grab()", "put()"]:

@@ -1,7 +1,9 @@
-[gd_resource type="Theme" load_steps=8 format=3]
+[gd_resource type="Theme" format=3 uid="uid://cyc2fhknh3vb8"]
 
 [sub_resource type="SystemFont" id="Mono"]
 font_names = PackedStringArray("Consolas", "Courier New")
+
+[sub_resource type="StyleBoxEmpty" id="Focus"]
 
 [sub_resource type="StyleBoxFlat" id="Surface"]
 content_margin_left = 12.0
@@ -14,15 +16,15 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.18, 0.29, 0.43, 1)
-corner_radius_bottom_left = 5
 corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
 
 [sub_resource type="StyleBoxFlat" id="Header"]
 content_margin_left = 12.0
 content_margin_top = 8.0
 content_margin_right = 12.0
 content_margin_bottom = 8.0
-bg_color = Color(0.10, 0.20, 0.37, 1)
+bg_color = Color(0.1, 0.2, 0.37, 1)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
@@ -34,43 +36,41 @@ corner_radius_top_right = 5
 [sub_resource type="StyleBoxFlat" id="Panel"]
 bg_color = Color(0.055, 0.095, 0.16, 1)
 
-[sub_resource type="StyleBoxEmpty" id="Focus"]
-
-[sub_resource type="StyleBoxFlat" id="ReferenceButton"]
-content_margin_left = 12.0
-content_margin_right = 12.0
-bg_color = Color(0.075, 0.125, 0.20, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_left = 4
-corner_radius_bottom_right = 4
-
 [sub_resource type="StyleBoxFlat" id="ReferenceButtonHover"]
 content_margin_left = 12.0
 content_margin_right = 12.0
 bg_color = Color(0.12, 0.21, 0.34, 1)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
-corner_radius_bottom_left = 4
 corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="ReferenceButton"]
+content_margin_left = 12.0
+content_margin_right = 12.0
+bg_color = Color(0.075, 0.125, 0.2, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [resource]
 default_font_size = 18
-PanelContainer/styles/panel = SubResource("Panel")
-HeaderLabel/base_type = &"Label"
-HeaderLabel/styles/normal = SubResource("Header")
-HeaderLabel/colors/font_color = Color(0.92, 0.96, 1, 1)
-ReferenceButton/base_type = &"Button"
-ReferenceButton/styles/normal = SubResource("ReferenceButton")
-ReferenceButton/styles/hover = SubResource("ReferenceButtonHover")
-ReferenceButton/styles/pressed = SubResource("ReferenceButtonHover")
-CodeEdit/fonts/font = SubResource("Mono")
 CodeEdit/colors/font_color = Color(0.92, 0.96, 1, 1)
 CodeEdit/colors/font_readonly_color = Color(0.92, 0.96, 1, 1)
 CodeEdit/colors/line_number_color = Color(0.46, 0.59, 0.74, 1)
+CodeEdit/fonts/font = SubResource("Mono")
+CodeEdit/styles/focus = SubResource("Focus")
 CodeEdit/styles/normal = SubResource("Surface")
 CodeEdit/styles/read_only = SubResource("Surface")
-CodeEdit/styles/focus = SubResource("Focus")
-RichTextLabel/fonts/normal_font = SubResource("Mono")
+HeaderLabel/base_type = &"Label"
+HeaderLabel/colors/font_color = Color(0.92, 0.96, 1, 1)
+HeaderLabel/styles/normal = SubResource("Header")
+PanelContainer/styles/panel = SubResource("Panel")
+ReferenceButton/base_type = &"Button"
+ReferenceButton/styles/hover = SubResource("ReferenceButtonHover")
+ReferenceButton/styles/normal = SubResource("ReferenceButton")
+ReferenceButton/styles/pressed = SubResource("ReferenceButtonHover")
 RichTextLabel/colors/default_color = Color(0.92, 0.96, 1, 1)
+RichTextLabel/fonts/normal_font = SubResource("Mono")
 RichTextLabel/styles/normal = SubResource("Surface")
