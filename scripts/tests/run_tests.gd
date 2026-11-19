@@ -122,6 +122,10 @@ func _step_robot_move(
 	var start_heading: Vector3 = robot.basis.z
 	var start_direction: Vector2i = robot.direction
 	var destination_direction: Vector2i = destination - start_cell
+	var treads: Array[Node] = robot.find_children("Tread_*", "MeshInstance3D", true, false)
+	var tread_positions: PackedVector3Array = _get_tread_positions(treads)
+	var drive_motion := Vector2.ZERO
+	var turn_motion := Vector2.ZERO
 	step.pressed.emit()
 	var deadline: SceneTreeTimer = create_timer(2.0)
 	var saw_turn := false
@@ -130,10 +134,15 @@ func _step_robot_move(
 	var signs_match := true
 	var cell_and_direction_updated_in_order := true
 	while step.disabled and deadline.time_left > 0:
+		var new_positions: PackedVector3Array = _get_tread_positions(treads)
+		var track_motion: Vector2 = _get_track_motion(tread_positions, new_positions)
+		tread_positions = new_positions
 		cell_and_direction_updated_in_order = (
 				cell_and_direction_updated_in_order and robot.cell == start_cell
 		)
 		if not robot.position.is_equal_approx(start_position):
+			if saw_move:
+				drive_motion += track_motion
 			saw_move = true
 			turned_before_moving = turned_before_moving and robot.basis.z.is_equal_approx(heading)
 			cell_and_direction_updated_in_order = (
@@ -142,6 +151,7 @@ func _step_robot_move(
 		elif not robot.basis.z.is_equal_approx(start_heading):
 			var cross_y: float = start_heading.cross(robot.basis.z).y
 			if not robot.basis.z.is_equal_approx(heading) and not is_zero_approx(cross_y):
+				turn_motion += track_motion
 				cell_and_direction_updated_in_order = (
 						cell_and_direction_updated_in_order and robot.direction == start_direction
 				)
@@ -163,6 +173,39 @@ func _step_robot_move(
 			robot.cell == destination and robot.basis.z.is_equal_approx(heading),
 			"Шаг завершает весь переезд"
 	)
+	_expect(drive_motion.x > 0 and drive_motion.y > 0, "При переезде обе гусеницы идут вперёд")
+	if turn_sign != 0:
+		_expect(
+				turn_motion.x * turn_sign > 0 and turn_motion.y * turn_sign < 0,
+				"При повороте гусеницы идут в противоположные стороны"
+		)
+	var stopped_positions: PackedVector3Array = _get_tread_positions(treads)
+	await create_timer(0.05).timeout
+	_expect(
+			_get_tread_positions(treads) == stopped_positions,
+			"Гусеницы останавливаются после шага"
+	)
+
+
+func _get_tread_positions(treads: Array[Node]) -> PackedVector3Array:
+	var positions := PackedVector3Array()
+	for tread: Node3D in treads:
+		positions.append(tread.position)
+	return positions
+
+
+func _get_track_motion(previous: PackedVector3Array, current: PackedVector3Array) -> Vector2:
+	var motion := Vector2.ZERO
+	for index: int in previous.size():
+		var before: Vector3 = previous[index]
+		var after: Vector3 = current[index]
+		# На верхней ветви гусеницы траки движутся вперёд по локальной оси Z.
+		if before.y > 0.22 and after.y > 0.22:
+			if after.x < 0.0:
+				motion.x += after.z - before.z
+			else:
+				motion.y += after.z - before.z
+	return motion
 
 
 func _test_camera_drag() -> void:
