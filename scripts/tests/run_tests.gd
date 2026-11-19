@@ -23,14 +23,17 @@ func _initialize() -> void:
 func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
 	var robot_turns_requested := arguments.has("--robot-turns")
+	var delivery_requested := arguments.has("--delivery")
 	var camera_drag_requested := arguments.has("--camera-drag")
 	var camera_zoom_requested := arguments.has("--camera-zoom")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
-			or camera_drag_requested or robot_turns_requested
+			or camera_drag_requested or robot_turns_requested or delivery_requested
 	):
-		if robot_turns_requested:
+		if delivery_requested:
+			await _test_delivery()
+		elif robot_turns_requested:
 			await _test_robot_turns()
 		elif camera_drag_requested:
 			await _test_camera_drag()
@@ -1358,6 +1361,17 @@ func _test_delivery() -> void:
 	await process_frame
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
+	var model: Node3D = _find_scene_instance(robot, "res://assets/models/robots/shtabel.glb")
+	_expect(model != null and model.is_visible_in_tree(), "На поле отображается модель Штабеля")
+	var model_pose: Transform3D
+	if model != null:
+		model_pose = robot.global_transform.affine_inverse() * model.global_transform
+		var bounds: AABB = _get_mesh_bounds(model)
+		_expect(
+				bounds.has_volume() and bounds.size.x < 1.0 and bounds.size.z < 1.0,
+				"Модель Штабеля помещается на клетке"
+		)
+		_expect(absf(bounds.position.y - 0.01) < 0.002, "Гусеницы стоят на поверхности плитки")
 	var parser := ProgramParser.new()
 	var executor := ProgramExecutor.new()
 	for source: String in ["grab()", "put()"]:
@@ -1367,6 +1381,20 @@ func _test_delivery() -> void:
 			parser.parse(START_TO_INPUT + "grab()\nput()"), robot.move, self, false, field.perform
 	)
 	_expect(field.carrying and not field.delivered, "Отказ положить вне зоны сохраняет коробку у робота")
+	if model != null:
+		_expect(
+				robot.cell == SorterField.CARGO_CELL and model.global_transform.is_equal_approx(
+						robot.global_transform * model_pose
+				),
+				"Модель поворачивается и перемещается вместе с роботом"
+		)
+		var cargo_scene: PackedScene = SorterField.CARGO_MODELS[field.get_box_color()]
+		var cargo: Node3D = _find_scene_instance(robot, cargo_scene.resource_path)
+		_expect(
+				cargo != null and cargo.is_visible_in_tree()
+				and _get_mesh_bounds(cargo).position.y > _get_mesh_bounds(model).end.y,
+				"Переносимая коробка видна над корпусом"
+		)
 	await executor.run(parser.parse("grab()"), robot.move, self, false, field.perform)
 	_expect(field.carrying and not executor.action_error.is_empty(), "Повторный захват отклонён")
 	await executor.run(parser.parse("move('left')\nmove('left')"), robot.move, self, false, field.perform)
@@ -1396,6 +1424,25 @@ func _test_delivery() -> void:
 	_expect(not is_instance_valid(outgoing), "Коробка исчезает после проезда по ленте")
 	game.queue_free()
 	await process_frame
+
+
+func _find_scene_instance(parent: Node, scene_path: String) -> Node3D:
+	for child: Node3D in parent.find_children("*", "Node3D", true, false):
+		if child.scene_file_path == scene_path:
+			return child
+	return null
+
+
+func _get_mesh_bounds(model: Node3D) -> AABB:
+	var meshes: Array[Node] = model.find_children("*", "MeshInstance3D", true, false)
+	if model is MeshInstance3D:
+		meshes.push_front(model)
+	var bounds := AABB()
+	for index: int in meshes.size():
+		var mesh: MeshInstance3D = meshes[index]
+		var mesh_bounds: AABB = mesh.global_transform * mesh.get_aabb()
+		bounds = mesh_bounds if index == 0 else bounds.merge(mesh_bounds)
+	return bounds
 
 
 func _test_wrong_delivery() -> void:

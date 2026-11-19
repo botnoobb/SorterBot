@@ -14,7 +14,7 @@ const INPUT_FEED_DURATION := 1.1
 const OUTPUT_CARGO_START := Vector3(-0.75, 0.592, 0)
 const OUTPUT_CARGO_END := Vector3(0.97, 0.592, 0)
 const OUTPUT_FEED_DURATION := 0.8
-const CARRIED_CARGO_POSITION := Vector3(0, 0.75, 0)
+const CARRIED_CARGO_POSITION := Vector3(0, 0.85, 0)
 const CARGO_MODELS := {
 	"orange": preload("res://assets/models/cargo/parcel.glb"),
 	"blue": preload("res://assets/models/cargo/parcel_blue.glb"),
