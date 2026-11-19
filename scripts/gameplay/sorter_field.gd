@@ -31,7 +31,6 @@ var delivered: bool = false
 var _cargo: Node3D
 var _input_feed: Tween
 var _box_color_name: String = "orange"
-var _robot_spawn_cell: Vector2i
 
 @onready var _robot: SorterRobot = $Robot
 @onready var _output_conveyors: Dictionary[Vector2i, Node3D] = {
@@ -41,9 +40,6 @@ var _robot_spawn_cell: Vector2i
 
 
 func _ready() -> void:
-	_robot_spawn_cell = Vector2i(roundi(_robot.position.x), roundi(_robot.position.z))
-	_robot.cell = _robot_spawn_cell
-
 	for x: int in range(FIELD_SIZE):
 		for y: int in range(FIELD_SIZE):
 			var tile_scene: PackedScene = ZONE_TILES.get(Vector2i(x, y), FLOOR_TILE)
@@ -66,8 +62,7 @@ func get_box_color() -> String:
 
 
 func reset_current_cargo() -> bool:
-	_robot.cell = _robot_spawn_cell
-	_robot.position = Vector3(_robot_spawn_cell.x, 0, _robot_spawn_cell.y)
+	_robot.reset_pose()
 	if delivered or _input_feed.is_running():
 		return false
 	if _cargo.get_parent() != self:

@@ -22,14 +22,17 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
+	var robot_turns_requested := arguments.has("--robot-turns")
 	var camera_drag_requested := arguments.has("--camera-drag")
 	var camera_zoom_requested := arguments.has("--camera-zoom")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
-			or camera_drag_requested
+			or camera_drag_requested or robot_turns_requested
 	):
-		if camera_drag_requested:
+		if robot_turns_requested:
+			await _test_robot_turns()
+		elif camera_drag_requested:
 			await _test_camera_drag()
 		elif camera_zoom_requested:
 			await _test_camera_zoom()
@@ -52,6 +55,7 @@ func _run() -> void:
 	await _test_execution()
 	await _test_diagnostics()
 	await _test_scene()
+	await _test_robot_turns()
 	await _test_camera_zoom()
 	await _test_camera_drag()
 	await _test_reference_panel()
@@ -61,6 +65,101 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_robot_turns() -> void:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
+	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	var messages: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var spawn_pose: Transform3D = robot.transform
+
+	code.text = "move('down')\nmove('right')\nmove('down')"
+	await _step_robot_move(robot, step, stop, Vector2i(1, 4), Vector3.BACK, 0)
+	await _step_robot_move(robot, step, stop, Vector2i(2, 4), Vector3.RIGHT, 1)
+	var edge_pose: Transform3D = robot.transform
+	step.pressed.emit()
+	await process_frame
+	_expect(
+			stop.disabled and messages.get_parsed_text().contains("границу поля"),
+			"Выход за границу отклоняется сразу"
+	)
+	_expect(
+			robot.cell == Vector2i(2, 4) and robot.transform == edge_pose,
+			"Отказ сохраняет клетку и позу"
+	)
+
+	code.text = "move('up')\nmove('right')\nmove('left')\nmove('up')"
+	await _step_robot_move(robot, step, stop, Vector2i(2, 3), Vector3.FORWARD, 1)
+	await _step_robot_move(robot, step, stop, Vector2i(3, 3), Vector3.RIGHT, -1)
+	await _step_robot_move(robot, step, stop, Vector2i(2, 3), Vector3.LEFT, -1, true)
+	_expect(stop.disabled, "Стоп завершает выполнение после разворота и переезда")
+	reset.pressed.emit()
+	_expect(
+			robot.cell == Vector2i(1, 3) and robot.transform == spawn_pose,
+			"Сброс восстанавливает стартовую позу"
+	)
+	code.text = "move('down')"
+	await _step_robot_move(robot, step, stop, Vector2i(1, 4), Vector3.BACK, 0)
+	game.queue_free()
+	await process_frame
+
+
+func _step_robot_move(
+		robot: SorterRobot, step: Button, stop: Button, destination: Vector2i,
+		heading: Vector3, turn_sign: int, stop_during_turn: bool = false
+) -> void:
+	var start_cell: Vector2i = robot.cell
+	var start_position: Vector3 = robot.position
+	var start_heading: Vector3 = robot.basis.z
+	var start_direction: Vector2i = robot.direction
+	var destination_direction: Vector2i = destination - start_cell
+	step.pressed.emit()
+	var deadline: SceneTreeTimer = create_timer(2.0)
+	var saw_turn := false
+	var saw_move := false
+	var turned_before_moving := true
+	var signs_match := true
+	var cell_and_direction_updated_in_order := true
+	while step.disabled and deadline.time_left > 0:
+		cell_and_direction_updated_in_order = (
+				cell_and_direction_updated_in_order and robot.cell == start_cell
+		)
+		if not robot.position.is_equal_approx(start_position):
+			saw_move = true
+			turned_before_moving = turned_before_moving and robot.basis.z.is_equal_approx(heading)
+			cell_and_direction_updated_in_order = (
+					cell_and_direction_updated_in_order and robot.direction == destination_direction
+			)
+		elif not robot.basis.z.is_equal_approx(start_heading):
+			var cross_y: float = start_heading.cross(robot.basis.z).y
+			if not robot.basis.z.is_equal_approx(heading) and not is_zero_approx(cross_y):
+				cell_and_direction_updated_in_order = (
+						cell_and_direction_updated_in_order and robot.direction == start_direction
+				)
+				signs_match = signs_match and signf(cross_y) == turn_sign
+				if not saw_turn and stop_during_turn:
+					stop.pressed.emit()
+				saw_turn = true
+		await process_frame
+	_expect(
+			saw_turn == (turn_sign != 0) and signs_match,
+			"Штабель поворачивает на месте в нужную сторону"
+	)
+	_expect(saw_move and turned_before_moving, "Штабель едет после поворота лицом к целевой клетке")
+	_expect(
+			cell_and_direction_updated_in_order,
+			"Направление обновляется после поворота, клетка после переезда"
+	)
+	_expect(
+			robot.cell == destination and robot.basis.z.is_equal_approx(heading),
+			"Шаг завершает весь переезд"
+	)
 
 
 func _test_camera_drag() -> void:
@@ -968,7 +1067,6 @@ func _test_scene() -> void:
 	_expect(code.get_line_background_color(0).a > 0, "Первая строка подсвечена")
 	await create_timer(0.1).timeout
 	_expect(robot.cell == Vector2i(1, 3), "Шаг не заканчивается раньше анимации")
-	_expect(robot.position.z < 3 and robot.position.z > 2, "Движение идёт внутри шага")
 	while robot.cell == Vector2i(1, 3):
 		await process_frame
 	_expect(code.get_line_background_color(0).a == 0, "Подсветка первой строки снята")
