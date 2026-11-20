@@ -30,10 +30,11 @@ var _input_feed: Tween
 var _box_color_name: String = "orange"
 
 @onready var _robot: SorterRobot = $Robot
+@onready var _input_conveyor: SorterConveyor = $InputConveyor
 @onready var _input_start: Marker3D = $InputConveyor/CargoStart
 @onready var _input_drop_start: Marker3D = $InputConveyor/DropStart
 @onready var _input_landing: Marker3D = $InputConveyor/InputTray/CargoLanding
-@onready var _output_conveyors: Dictionary[Vector2i, Node3D] = {
+@onready var _output_conveyors: Dictionary[Vector2i, SorterConveyor] = {
 	ZONE_CELL: $OrangeOutputConveyor,
 	BLUE_ZONE_CELL: $BlueOutputConveyor,
 }
@@ -109,7 +110,7 @@ func _attach_cargo() -> void:
 	_cargo.transform = Transform3D.IDENTITY
 
 
-func _deliver_cargo(conveyor: Node3D) -> void:
+func _deliver_cargo(conveyor: SorterConveyor) -> void:
 	var feed: Tween = create_tween()
 	feed.pause()
 	await _robot.animate_cargo(false, _release_cargo.bind(feed, conveyor))
@@ -123,11 +124,11 @@ func _deliver_cargo(conveyor: Node3D) -> void:
 	cargo_delivered.emit()
 
 
-func _release_cargo(feed: Tween, conveyor: Node3D) -> void:
+func _release_cargo(feed: Tween, conveyor: SorterConveyor) -> void:
 	_cargo.reparent(self)
 	carrying = false
-	feed.tween_property(
-			_cargo, "position", conveyor.transform * OUTPUT_CARGO_END, OUTPUT_FEED_DURATION
+	conveyor.queue_transport(
+			feed, _cargo, conveyor.to_global(OUTPUT_CARGO_END), OUTPUT_FEED_DURATION
 	)
 	feed.play()
 
@@ -141,8 +142,9 @@ func _spawn_cargo() -> void:
 	var drop_start: Vector3 = to_local(_input_drop_start.global_position)
 	var landing: Vector3 = to_local(_input_landing.global_position)
 	_input_feed = create_tween()
-	_input_feed.tween_property(
-			_cargo, "position", drop_start, INPUT_FEED_DURATION - INPUT_DROP_DURATION
+	_input_conveyor.queue_transport(
+			_input_feed, _cargo, _input_drop_start.global_position,
+			INPUT_FEED_DURATION - INPUT_DROP_DURATION
 	)
 	# После края ленты горизонтальная скорость постоянна, а падение ускоряется.
 	_input_feed.tween_method(

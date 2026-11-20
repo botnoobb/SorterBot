@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
@@ -8,6 +8,7 @@
 [ext_resource type="Theme" path="res://assets/editor_theme.tres" id="5"]
 [ext_resource type="PackedScene" path="res://assets/models/field/conveyor.glb" id="6"]
 [ext_resource type="PackedScene" path="res://assets/models/field/tray_orange.glb" id="7"]
+[ext_resource type="Script" path="res://scripts/gameplay/sorter_conveyor.gd" id="8"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1
@@ -121,6 +122,7 @@ mesh = SubResource("FrameMesh")
 
 [node name="InputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
 position = Vector3(-2.516, -0.294, 0)
+script = ExtResource("8")
 
 [node name="CargoStart" type="Marker3D" parent="Layout/Field/Viewport/World/InputConveyor"]
 position = Vector3(-0.75, 0.592, 0)
@@ -137,9 +139,11 @@ rotation = Vector3(0, -1.5707963, 0)
 
 [node name="OrangeOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
 position = Vector3(5.49, -0.381, 2)
+script = ExtResource("8")
 
 [node name="BlueOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
 position = Vector3(5.49, -0.381, 3)
+script = ExtResource("8")
 
 [node name="Robot" parent="Layout/Field/Viewport/World" instance=ExtResource("3")]
 position = Vector3(1, 0, 3)

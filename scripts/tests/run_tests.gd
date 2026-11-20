@@ -8,6 +8,7 @@ const ORANGE_TO_INPUT := (
 		'move("up")\nmove("up")\nmove("left")\nmove("left")\nmove("left")\nmove("left")\n'
 )
 const DELIVER_ORANGE := START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + "put()"
+const BELT_MARKING_INTERVAL := 0.52
 
 var _failures: int = 0
 var _checks: int = 0
@@ -699,10 +700,16 @@ func _test_conditions() -> void:
 	)
 	var lines_before_branch: Array[int] = []
 	lines_before_branch.assign(range(1, 14))
+	var orange_conveyor: SorterConveyor = field.get_node("OrangeOutputConveyor")
+	var blue_conveyor: SorterConveyor = field.get_node("BlueOutputConveyor")
 	for single_step: bool in [false, true]:
 		for orange: bool in [true, false]:
 			reset.pressed.emit()
 			lines.clear()
+			var selected: SorterConveyor = orange_conveyor if orange else blue_conveyor
+			var idle: SorterConveyor = blue_conveyor if orange else orange_conveyor
+			var selected_offset: float = selected.get_belt_offset()
+			var idle_offset: float = idle.get_belt_offset()
 			var start: Button = step if single_step else run
 			start.pressed.emit()
 			var deadline := create_timer(8.0)
@@ -721,6 +728,11 @@ func _test_conditions() -> void:
 			var zone := Vector2i(4, 2) if orange else Vector2i(4, 3)
 			_expect(stop.disabled and field.delivered and robot.cell == zone,
 					"Коробка доставлена в зону своего цвета")
+			_expect(
+					selected.get_belt_offset() != selected_offset
+					and idle.get_belt_offset() == idle_offset,
+					"При доставке движется только выбранная выходная лента"
+			)
 	reset.pressed.emit()
 	code.text = START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + 'move("down")\nput()'
 	run.pressed.emit()
@@ -1418,19 +1430,40 @@ func _test_input_tray() -> void:
 	var landing_marker: Marker3D = field.get_node("InputConveyor/InputTray/CargoLanding")
 	var landing: Vector3 = field.to_local(landing_marker.global_position)
 	var belt_height: float = cargo.position.y
+	var input: SorterConveyor = field.get_node("InputConveyor")
+	var start_offset: float = input.get_belt_offset()
+	var start_x: float = cargo.position.x
 	await create_timer(0.1).timeout
+	_expect(
+			is_equal_approx(input.get_belt_offset() - start_offset, cargo.position.x - start_x)
+			and cargo.position.x > start_x,
+			"Рисунок входной ленты движется на то же расстояние, что и коробка"
+	)
 	var position_before_reset: Vector3 = cargo.position
 	reset.pressed.emit()
 	_expect(cargo.position == position_before_reset, "Сброс сохраняет ход подачи коробки")
 	var saw_drop := false
+	var falling_offset: float = NAN
 	var deadline: SceneTreeTimer = create_timer(4.0)
 	while not cargo.position.is_equal_approx(landing) and deadline.time_left > 0.0:
 		saw_drop = saw_drop or cargo.position.y < belt_height - 0.02
+		if saw_drop and is_nan(falling_offset):
+			falling_offset = input.get_belt_offset()
 		await process_frame
 	_expect(
 			saw_drop and cargo.position.is_equal_approx(landing),
 			"Коробка опускается с ленты и остаётся в точке захвата в лотке"
 	)
+	_expect(input.get_belt_offset() == falling_offset, "Во время падения входная лента неподвижна")
+	var settled_offset: float = input.get_belt_offset()
+	var tray: Node3D = landing_marker.get_parent_node_3d()
+	var lip_x: float = field.to_local(tray.global_position).x
+	_expect(
+			absf(settled_offset - fposmod(lip_x - start_x, BELT_MARKING_INTERVAL)) < 0.002,
+			"Входная лента останавливается у края полотна"
+	)
+	var next_feed_offsets: Array[float] = []
+	field.cargo_delivered.connect(func() -> void: next_feed_offsets.append(input.get_belt_offset()))
 
 	code.text = DELIVER_ORANGE
 	run.pressed.emit()
@@ -1438,6 +1471,7 @@ func _test_input_tray() -> void:
 	while not stop.disabled and deadline.time_left > 0.0:
 		await process_frame
 	_expect(stop.disabled and field.delivered, "После доставки запускается следующая подача")
+	_expect(next_feed_offsets == [settled_offset], "Следующая подача сохраняет положение рисунка")
 	if not stop.disabled or not field.delivered:
 		game.queue_free()
 		await process_frame
@@ -1455,6 +1489,12 @@ func _test_input_tray() -> void:
 			waited_for_cargo = true
 		await process_frame
 	_expect(waited_for_cargo, "Ранний grab ждёт коробку на клетке выдачи")
+	_expect(
+			is_equal_approx(
+					input.get_belt_offset(), fposmod(2.0 * settled_offset, BELT_MARKING_INTERVAL)
+			),
+			"Следующая коробка продвигает рисунок с сохранённого положения"
+	)
 	_expect(stop.disabled and field.carrying and robot.is_ancestor_of(cargo), "Захват ждёт падения")
 	_expect(robot.direction == Vector2i.LEFT, "grab разворачивает Штабеля к приёмному лотку")
 	_expect(
@@ -1527,6 +1567,8 @@ func _test_delivery() -> void:
 			"Граница сохраняет позицию и груз"
 	)
 	var commands: Array[ProgramCommand] = parser.parse(INPUT_TO_ORANGE + "put()")
+	var orange_conveyor: SorterConveyor = field.get_node("OrangeOutputConveyor")
+	var output_start_offset: float = orange_conveyor.get_belt_offset()
 	executor.run(commands, robot.move, self, true, field.perform)
 	for index: int in range(6):
 		while executor.is_running and not executor.is_paused:
@@ -1535,25 +1577,45 @@ func _test_delivery() -> void:
 		executor.resume(true)
 	await create_timer(0.1).timeout
 	_expect(not field.delivered, "Успех ждёт завершения put")
+	var stationary_until_release: bool = orange_conveyor.get_belt_offset() == output_start_offset
 	executor.request_stop()
 	var cargo_scene: PackedScene = SorterField.CARGO_MODELS[field.get_box_color()]
 	var outgoing: Node3D = _find_scene_instance(field, cargo_scene.resource_path)
 	var travelled_on_belt := false
 	var released_on_belt := false
 	var release_x: float = NAN
+	var release_offset: float = NAN
+	var followed_box := true
+	var half_interval: float = BELT_MARKING_INTERVAL / 2.0
 	while executor.is_running:
 		if is_instance_valid(outgoing) and outgoing.get_parent() == field:
 			if is_nan(release_x):
 				release_x = outgoing.position.x
+				release_offset = orange_conveyor.get_belt_offset()
 				released_on_belt = absf(outgoing.position.y - 0.211) < 0.002
+			var distance: float = outgoing.position.x - release_x
+			var belt_delta: float = orange_conveyor.get_belt_offset() - release_offset
+			var gap: float = wrapf(belt_delta - distance, -half_interval, half_interval)
+			followed_box = followed_box and absf(gap) < 0.001
 			travelled_on_belt = travelled_on_belt or outgoing.position.x > release_x + 0.1
+		elif is_instance_valid(outgoing):
+			var offset: float = orange_conveyor.get_belt_offset()
+			stationary_until_release = stationary_until_release and offset == output_start_offset
 		await process_frame
 	_expect(field.delivered and not field.carrying, "Остановка дожидается завершения put и доставки")
 	_expect(robot.direction == Vector2i.RIGHT, "put разворачивает Штабеля к выходному конвейеру")
 	_expect(travelled_on_belt, "Коробка проезжает по выходному конвейеру")
+	_expect(followed_box and travelled_on_belt, "Выходная лента движется вместе с коробкой")
 	_expect(released_on_belt, "Захваты отпускают коробку на уровне выходной ленты")
+	_expect(stationary_until_release, "До отпускания выходная лента стоит")
 	await process_frame
 	_expect(not is_instance_valid(outgoing), "Коробка исчезает после проезда по ленте")
+	var output_stop_offset: float = orange_conveyor.get_belt_offset()
+	await create_timer(0.1).timeout
+	_expect(
+			orange_conveyor.get_belt_offset() == output_stop_offset,
+			"После доставки выходная лента стоит"
+	)
 	game.queue_free()
 	await process_frame
 
