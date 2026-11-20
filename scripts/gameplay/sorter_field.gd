@@ -10,10 +10,8 @@ const ZONE_CELL := Vector2i(4, 2)
 const BLUE_ZONE_CELL := Vector2i(4, 3)
 const INPUT_FEED_DURATION := 2.75
 const INPUT_DROP_DURATION := 0.35
-const OUTPUT_CARGO_START := Vector3(-0.75, 0.592, 0)
 const OUTPUT_CARGO_END := Vector3(0.97, 0.592, 0)
 const OUTPUT_FEED_DURATION := 0.8
-const CARRIED_CARGO_POSITION := Vector3(0, 1.06, 0)
 const CARGO_MODELS := {
 	"orange": preload("res://assets/models/cargo/parcel.glb"),
 	"blue": preload("res://assets/models/cargo/parcel_blue.glb"),
@@ -69,7 +67,7 @@ func reset_current_cargo() -> bool:
 		return false
 	if _cargo.get_parent() != self:
 		_cargo.reparent(self)
-	_cargo.position = to_local(_input_landing.global_position)
+	_cargo.global_transform = _input_landing.global_transform
 	carrying = false
 	return true
 
@@ -88,6 +86,10 @@ func perform(command: ProgramCommand, duration: float) -> String:
 			return "На этой клетке нет коробки."
 		if _input_feed.is_running():
 			await _input_feed.finished
+		await _robot.face(Vector2i.LEFT, duration)
+		await _robot.animate_cargo(true, _attach_cargo)
+		carrying = true
+		delivered = false
 	elif command.type == ProgramCommand.Type.PUT:
 		if not carrying:
 			return "У робота нет коробки."
@@ -95,34 +97,45 @@ func perform(command: ProgramCommand, duration: float) -> String:
 			return "Коробку нужно положить в зоне доставки."
 		if _robot.cell != ZONES_BY_COLOR[_box_color_name]:
 			return "Этой коробке нужна зона %s." % _box_color_name
+		await _robot.face(Vector2i.RIGHT, duration)
+		await _deliver_cargo(_output_conveyors[_robot.cell])
 	else:
 		return "Неизвестное игровое действие."
-	var grabbing: bool = command.type == ProgramCommand.Type.GRAB
-	_cargo.reparent(_robot if grabbing else self)
-	var tween: Tween = create_tween()
-	if grabbing:
-		tween.tween_property(_cargo, "position", CARRIED_CARGO_POSITION, duration)
-	else:
-		var conveyor: Node3D = _output_conveyors[_robot.cell]
-		tween.tween_property(_cargo, "position", conveyor.transform * OUTPUT_CARGO_START, duration)
-		tween.tween_property(
-				_cargo, "position", conveyor.transform * OUTPUT_CARGO_END, OUTPUT_FEED_DURATION
-		)
-	await tween.finished
-	carrying = grabbing
-	delivered = not grabbing
-	if not grabbing:
-		remove_child(_cargo)
-		_cargo.queue_free()
-		_box_color_name = "blue" if _box_color_name == "orange" else "orange"
-		_spawn_cargo()
-		cargo_delivered.emit()
 	return ""
+
+
+func _attach_cargo() -> void:
+	_cargo.reparent(_robot.cargo_socket, false)
+	_cargo.transform = Transform3D.IDENTITY
+
+
+func _deliver_cargo(conveyor: Node3D) -> void:
+	var feed: Tween = create_tween()
+	feed.pause()
+	await _robot.animate_cargo(false, _release_cargo.bind(feed, conveyor))
+	if feed.is_running():
+		await feed.finished
+	delivered = true
+	remove_child(_cargo)
+	_cargo.queue_free()
+	_box_color_name = "blue" if _box_color_name == "orange" else "orange"
+	_spawn_cargo()
+	cargo_delivered.emit()
+
+
+func _release_cargo(feed: Tween, conveyor: Node3D) -> void:
+	_cargo.reparent(self)
+	carrying = false
+	feed.tween_property(
+			_cargo, "position", conveyor.transform * OUTPUT_CARGO_END, OUTPUT_FEED_DURATION
+	)
+	feed.play()
 
 
 func _spawn_cargo() -> void:
 	var model: PackedScene = CARGO_MODELS[_box_color_name]
 	_cargo = model.instantiate()
+	_cargo.basis = global_basis.inverse() * _input_landing.global_basis
 	_cargo.position = to_local(_input_start.global_position)
 	add_child(_cargo)
 	var drop_start: Vector3 = to_local(_input_drop_start.global_position)

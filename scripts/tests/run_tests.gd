@@ -724,11 +724,12 @@ func _test_conditions() -> void:
 	reset.pressed.emit()
 	code.text = START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + 'move("down")\nput()'
 	run.pressed.emit()
-	var deadline := create_timer(6.0)
+	var deadline := create_timer(8.0)
 	while not stop.disabled and deadline.time_left > 0.0:
 		await process_frame
 	_expect(executor.action_error == "Этой коробке нужна зона orange.",
 			"Зона другого цвета отклоняет доставку")
+	_expect(robot.direction == Vector2i.DOWN, "Отказ в чужой зоне не поворачивает Штабеля")
 	_expect(field.carrying and not field.delivered, "Ошибочная доставка не меняет текущий груз")
 	reset.pressed.emit()
 	_expect(field.get_box_color() == "orange", "Перезапуск груза сохраняет цвет")
@@ -1444,7 +1445,7 @@ func _test_input_tray() -> void:
 
 	cargo_scene = SorterField.CARGO_MODELS[field.get_box_color()]
 	cargo = _find_scene_instance(field, cargo_scene.resource_path)
-	code.text = ORANGE_TO_INPUT + "grab()"
+	code.text = 'move("left")\n'.repeat(4) + 'move("up")\n'.repeat(2) + "grab()"
 	run.pressed.emit()
 	var waited_for_cargo := false
 	deadline = create_timer(5.0)
@@ -1454,7 +1455,14 @@ func _test_input_tray() -> void:
 			waited_for_cargo = true
 		await process_frame
 	_expect(waited_for_cargo, "Ранний grab ждёт коробку на клетке выдачи")
-	_expect(stop.disabled and field.carrying and cargo.get_parent() == robot, "Захват ждёт падения")
+	_expect(stop.disabled and field.carrying and robot.is_ancestor_of(cargo), "Захват ждёт падения")
+	_expect(robot.direction == Vector2i.LEFT, "grab разворачивает Штабеля к приёмному лотку")
+	_expect(
+			cargo.get_parent() == robot.cargo_socket and cargo.transform.is_equal_approx(
+					Transform3D.IDENTITY
+			),
+			"После захвата коробка следует за точкой крепления захватов"
+	)
 	reset.pressed.emit()
 	_expect(
 			cargo.get_parent() == field and cargo.position.is_equal_approx(landing) and not field.carrying,
@@ -1507,8 +1515,9 @@ func _test_delivery() -> void:
 		var cargo: Node3D = _find_scene_instance(robot, cargo_scene.resource_path)
 		_expect(
 				cargo != null and cargo.is_visible_in_tree()
-				and _get_mesh_bounds(cargo).position.y > _get_mesh_bounds(model).end.y,
-				"Переносимая коробка видна над корпусом"
+				and cargo.get_parent() == robot.cargo_socket
+				and robot.to_local(cargo.global_position).z > 0.5,
+				"Переносимая коробка видна в захватах перед корпусом"
 		)
 	await executor.run(parser.parse("grab()"), robot.move, self, false, field.perform)
 	_expect(field.carrying and not executor.action_error.is_empty(), "Повторный захват отклонён")
@@ -1527,14 +1536,22 @@ func _test_delivery() -> void:
 	await create_timer(0.1).timeout
 	_expect(not field.delivered, "Успех ждёт завершения put")
 	executor.request_stop()
-	var outgoing: Node3D = field.get("_cargo")
+	var cargo_scene: PackedScene = SorterField.CARGO_MODELS[field.get_box_color()]
+	var outgoing: Node3D = _find_scene_instance(field, cargo_scene.resource_path)
 	var travelled_on_belt := false
+	var released_on_belt := false
+	var release_x: float = NAN
 	while executor.is_running:
-		if is_instance_valid(outgoing) and outgoing.position.x > 5.0:
-			travelled_on_belt = true
+		if is_instance_valid(outgoing) and outgoing.get_parent() == field:
+			if is_nan(release_x):
+				release_x = outgoing.position.x
+				released_on_belt = absf(outgoing.position.y - 0.211) < 0.002
+			travelled_on_belt = travelled_on_belt or outgoing.position.x > release_x + 0.1
 		await process_frame
 	_expect(field.delivered and not field.carrying, "Остановка дожидается завершения put и доставки")
+	_expect(robot.direction == Vector2i.RIGHT, "put разворачивает Штабеля к выходному конвейеру")
 	_expect(travelled_on_belt, "Коробка проезжает по выходному конвейеру")
+	_expect(released_on_belt, "Захваты отпускают коробку на уровне выходной ленты")
 	await process_frame
 	_expect(not is_instance_valid(outgoing), "Коробка исчезает после проезда по ленте")
 	game.queue_free()

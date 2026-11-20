@@ -133,12 +133,13 @@ position = Vector3(0.993, 0.551, 0)
 
 [node name="CargoLanding" type="Marker3D" parent="Layout/Field/Viewport/World/InputConveyor/InputTray"]
 position = Vector3(0.423, -0.046, 0)
+rotation = Vector3(0, -1.5707963, 0)
 
 [node name="OrangeOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
-position = Vector3(5.49, -0.572, 2)
+position = Vector3(5.49, -0.381, 2)
 
 [node name="BlueOutputConveyor" parent="Layout/Field/Viewport/World" instance=ExtResource("6")]
-position = Vector3(5.49, -0.572, 3)
+position = Vector3(5.49, -0.381, 3)
 
 [node name="Robot" parent="Layout/Field/Viewport/World" instance=ExtResource("3")]
 position = Vector3(1, 0, 3)
