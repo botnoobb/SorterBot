@@ -8,7 +8,8 @@ const ORANGE_TO_INPUT := (
 		'move("up")\nmove("up")\nmove("left")\nmove("left")\nmove("left")\nmove("left")\n'
 )
 const DELIVER_ORANGE := START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + "put()"
-const BELT_MARKING_INTERVAL := 0.52
+# Восемь шевронов на замкнутом профиле полотна из GLB.
+const BELT_MARKING_INTERVAL := (4.0 * 0.839 + TAU * 0.155) / 8.0
 
 var _failures: int = 0
 var _checks: int = 0

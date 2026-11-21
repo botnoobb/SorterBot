@@ -2,8 +2,13 @@ extends Node3D
 class_name SorterConveyor
 
 const BELT_SHADER := preload("res://assets/conveyor_belt.gdshader")
-const PATTERN_PERIOD := 0.52
-const BELT_END_X := 0.994
+# Размеры верхней и нижней ветвей и барабанов из модели конвейера.
+const DRUM_CENTER_X := 0.839
+const DRUM_CENTER_Y := 0.437
+const DRUM_RADIUS := 0.155
+const CHEVRONS_PER_LOOP := 8
+const PATTERN_PERIOD := (4.0 * DRUM_CENTER_X + TAU * DRUM_RADIUS) / CHEVRONS_PER_LOOP
+const BELT_END_X := DRUM_CENTER_X + DRUM_RADIUS
 const BELT_SURFACE := 0
 const MARKING_SURFACE := 1
 
@@ -22,6 +27,8 @@ func _ready() -> void:
 	_belt_material.shader = BELT_SHADER
 	_belt_material.set_shader_parameter(&"belt_color", rubber.albedo_color)
 	_belt_material.set_shader_parameter(&"marking_color", marking.albedo_color)
+	_belt_material.set_shader_parameter(&"drum_center", Vector2(DRUM_CENTER_X, DRUM_CENTER_Y))
+	_belt_material.set_shader_parameter(&"drum_radius", DRUM_RADIUS)
 	_belt_material.set_shader_parameter(&"pattern_period", PATTERN_PERIOD)
 	_belt_material.set_shader_parameter(&"belt_offset", 0.0)
 	_belt.set_surface_override_material(BELT_SURFACE, _belt_material)
