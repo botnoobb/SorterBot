@@ -189,6 +189,11 @@ text = "Запрограммируйте робота и доставьте ко
 autowrap_mode = 2
 mouse_filter = 2
 
+[node name="OrderProgress" type="Label" parent="Lesson/Content"]
+layout_mode = 2
+autowrap_mode = 2
+mouse_filter = 2
+
 [node name="Details" type="RichTextLabel" parent="Lesson/Content"]
 visible = false
 layout_mode = 2

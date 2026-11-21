@@ -10,6 +10,8 @@ const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
 const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
+const FIRST_ORDER_COLOR := "orange"
+const FIRST_ORDER_TARGET := 3
 # Габариты проекции рамы, конвейеров и робота с коробкой.
 const FIELD_PROJECTION_SIZE := Vector2(10.1, 5.0)
 const FIELD_PROJECTION_CENTER_X_OFFSET := -0.51
@@ -96,6 +98,7 @@ const FUNCTIONS_REFERENCE := (
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
+var _order_deliveries: int = 0
 var _field_zoom: float = 1.0
 var _field_pan := Vector2.ZERO
 var _field_drag_button: MouseButton = MOUSE_BUTTON_NONE
@@ -112,6 +115,7 @@ var _field_drag_position := Vector2.ZERO
 @onready var _lesson_header: HBoxContainer = $Lesson/Content/Header
 @onready var _lesson_title: Label = $Lesson/Content/Header/Title
 @onready var _lesson_toggle: Button = $Lesson/Content/Header/Toggle
+@onready var _order_progress: Label = $Lesson/Content/OrderProgress
 @onready var _reference_panel: Panel = $ReferencePanel
 @onready var _reference_compact_top: float = _reference_panel.offset_top
 @onready var _reference_sections: VBoxContainer = $ReferencePanel/Content/Sections
@@ -121,7 +125,8 @@ var _field_drag_position := Vector2.ZERO
 
 
 func _ready() -> void:
-	_field.cargo_delivered.connect(func() -> void: _goal.text = "Коробка доставлена")
+	_field.cargo_delivered.connect(_on_cargo_delivered)
+	_update_order_progress()
 	_editor.run_requested.connect(_on_run_requested)
 	_editor.step_requested.connect(_on_step_requested)
 	_editor.stop_requested.connect(_executor.request_stop)
@@ -235,7 +240,7 @@ func _fit_compact_lesson_height() -> void:
 func _frame_field() -> void:
 	var field_rect: Rect2 = _field_view.get_global_rect()
 	var lesson_margin: float = _lesson.get_theme_stylebox("panel").get_margin(SIDE_BOTTOM)
-	var top: float = _goal.get_global_rect().end.y - field_rect.position.y + lesson_margin
+	var top: float = _order_progress.get_global_rect().end.y - field_rect.position.y + lesson_margin
 	var reference_top: float = field_rect.size.y + _reference_compact_top
 	var reference_right: float = _reference_panel.get_global_rect().end.x - field_rect.position.x
 	var above_reference := Rect2(0, top, field_rect.size.x, reference_top - top)
@@ -361,6 +366,21 @@ func _on_step_requested(source: String) -> void:
 			_executor.resume(true)
 		return
 	_start_program(source, true)
+
+
+func _on_cargo_delivered(color_name: String) -> void:
+	_goal.text = "Коробка доставлена"
+	if color_name == FIRST_ORDER_COLOR and _order_deliveries < FIRST_ORDER_TARGET:
+		_order_deliveries += 1
+		_update_order_progress()
+
+
+func _update_order_progress() -> void:
+	var count := "%d из %d" % [_order_deliveries, FIRST_ORDER_TARGET]
+	if _order_deliveries == FIRST_ORDER_TARGET:
+		_order_progress.text = "Заказ выполнен: %s оранжевых" % count
+	else:
+		_order_progress.text = "Заказ: оранжевые коробки — %s" % count
 
 
 func _on_cargo_reset_requested() -> void:

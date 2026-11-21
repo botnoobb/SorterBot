@@ -29,12 +29,16 @@ func _run() -> void:
 	var input_tray_requested := arguments.has("--input-tray")
 	var camera_drag_requested := arguments.has("--camera-drag")
 	var camera_zoom_requested := arguments.has("--camera-zoom")
+	var order_progress_requested := arguments.has("--order-progress")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
+			or order_progress_requested
 	):
-		if input_tray_requested:
+		if order_progress_requested:
+			await _test_order_progress()
+		elif input_tray_requested:
 			await _test_input_tray()
 		elif delivery_requested:
 			await _test_delivery()
@@ -58,6 +62,7 @@ func _run() -> void:
 	await _test_functions()
 	await _test_conditions()
 	await _test_first_lesson()
+	await _test_order_progress()
 	_test_parser()
 	_test_print_parser()
 	await _test_execution()
@@ -511,7 +516,7 @@ func _test_functions() -> void:
 		reset.pressed.emit()
 		await process_frame
 		var zones: Array[Vector2i] = []
-		field.cargo_delivered.connect(func() -> void: zones.append(robot.cell))
+		field.cargo_delivered.connect(func(_color_name: String) -> void: zones.append(robot.cell))
 		code.text = paragraphs[2] + "\n" + paragraphs[3]
 		run.pressed.emit()
 		var deadline := create_timer(20.0)
@@ -520,7 +525,7 @@ func _test_functions() -> void:
 		_expect(stop.disabled and zones == [Vector2i(4, 2), Vector2i(4, 3)],
 				"Пример из справки двумя вызовами доставляет коробки в зоны их цветов")
 	var return_zones: Array[Vector2i] = []
-	field.cargo_delivered.connect(func() -> void: return_zones.append(robot.cell))
+	field.cargo_delivered.connect(func(_color_name: String) -> void: return_zones.append(robot.cell))
 	for single_step: bool in [false, true]:
 		content.get_node("ResetCargo").pressed.emit()
 		await process_frame
@@ -647,7 +652,7 @@ func _test_while() -> void:
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
 	var zones: Array[Vector2i] = []
-	field.cargo_delivered.connect(func() -> void:
+	field.cargo_delivered.connect(func(_color_name: String) -> void:
 		zones.append(robot.cell)
 		if zones.size() == 2:
 			stop.pressed.emit()
@@ -1046,6 +1051,86 @@ func _play_first_lesson(game: Control, goal: Label, delivery_program: String) ->
 	_expect(goal.text == "Коробка доставлена", "Продолжение со второй строки завершает урок")
 
 
+func _test_order_progress() -> void:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	var progress: Label = game.get_node_or_null("Lesson/Content/OrderProgress")
+	_expect(
+			progress != null and progress.is_visible_in_tree()
+			and progress.text == "Заказ: оранжевые коробки — 0 из 3",
+			"Карточка показывает цель первого заказа и начальный прогресс"
+	)
+	if progress == null:
+		game.queue_free()
+		await process_frame
+		return
+
+	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	var message: Label = content.get_node("Message")
+	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var deliver_blue := START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + 'move("down")\nput()'
+	var empty_progress := "Заказ: оранжевые коробки — 0 из 3"
+	var first_delivery := "Заказ: оранжевые коробки — 1 из 3"
+	var second_delivery := "Заказ: оранжевые коробки — 2 из 3"
+
+	code.text = deliver_blue
+	_expect(
+			await _run_order_program(run, stop)
+			and output.get_parsed_text().contains("Этой коробке нужна зона orange.")
+			and progress.text == empty_progress,
+			"Попытка доставить оранжевую коробку в синюю зону не засчитывается"
+	)
+
+	code.text = 'move("up")\nput()'
+	_expect(
+			await _run_order_program(run, stop) and progress.text == first_delivery,
+			"Правильная доставка оранжевой коробки продвигает заказ"
+	)
+
+	code.text = ORANGE_TO_INPUT + "grab()"
+	await process_frame
+	_expect(progress.text == first_delivery, "Редактирование кода сохраняет прогресс заказа")
+	_expect(
+			await _run_order_program(run, stop) and message.text == "Программа завершена.",
+			"Робот забирает следующий груз с выдачи"
+	)
+	reset.pressed.emit()
+	_expect(
+			message.text == "Текущий груз возвращён на выдачу." and progress.text == first_delivery,
+			"Возврат захваченного груза сохраняет прогресс по предыдущей коробке"
+	)
+
+	var completed := "Заказ выполнен: 3 из 3 оранжевых"
+	for delivery: Array in [
+		[deliver_blue, first_delivery],
+		[DELIVER_ORANGE, second_delivery],
+		[deliver_blue, second_delivery],
+		[DELIVER_ORANGE, completed],
+	]:
+		code.text = delivery[0]
+		_expect(
+				await _run_order_program(run, stop)
+				and message.text == "Программа завершена." and progress.text == delivery[1],
+				"После правильной доставки карточка показывает «%s»" % delivery[1]
+		)
+		reset.pressed.emit()
+	game.queue_free()
+	await process_frame
+
+
+func _run_order_program(run: Button, stop: Button) -> bool:
+	run.pressed.emit()
+	var deadline := create_timer(20.0)
+	while not stop.disabled and deadline.time_left > 0.0:
+		await process_frame
+	return stop.disabled
+
+
 func _test_reference_panel() -> void:
 	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
 	var game: Control = packed.instantiate()
@@ -1357,7 +1442,9 @@ func _test_scene() -> void:
 	robot.position = Vector3(1, 0, 3)
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var delivery_cells: Array[Vector2i] = []
-	field.cargo_delivered.connect(func() -> void: delivery_cells.append(robot.cell))
+	field.cargo_delivered.connect(
+			func(_color_name: String) -> void: delivery_cells.append(robot.cell)
+	)
 	code.text = (
 			DELIVER_ORANGE + "\n" + ORANGE_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE
 			+ "move('down')\nput()\n"
@@ -1464,7 +1551,9 @@ func _test_input_tray() -> void:
 			"Входная лента останавливается у края полотна"
 	)
 	var next_feed_offsets: Array[float] = []
-	field.cargo_delivered.connect(func() -> void: next_feed_offsets.append(input.get_belt_offset()))
+	field.cargo_delivered.connect(
+			func(_color_name: String) -> void: next_feed_offsets.append(input.get_belt_offset())
+	)
 
 	code.text = DELIVER_ORANGE
 	run.pressed.emit()

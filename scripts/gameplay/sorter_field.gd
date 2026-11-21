@@ -1,7 +1,7 @@
 extends Node3D
 class_name SorterField
 
-signal cargo_delivered()
+signal cargo_delivered(color_name: String)
 
 const FIELD_SIZE := 5
 const FLOOR_TILE := preload("res://assets/models/field/floor_tile.glb")
@@ -119,9 +119,10 @@ func _deliver_cargo(conveyor: SorterConveyor) -> void:
 	delivered = true
 	remove_child(_cargo)
 	_cargo.queue_free()
+	var delivered_color := _box_color_name
 	_box_color_name = "blue" if _box_color_name == "orange" else "orange"
 	_spawn_cargo()
-	cargo_delivered.emit()
+	cargo_delivered.emit(delivered_color)
 
 
 func _release_cargo(feed: Tween, conveyor: SorterConveyor) -> void:
