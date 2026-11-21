@@ -1193,6 +1193,14 @@ func _verify_order_acceptance(game: Control, single_step: bool) -> void:
 	var source := 'move("up")\nmove("up")\nprint("Старый запуск")'
 	var cargo_color := field.get_box_color()
 	var was_carrying := field.carrying
+	var held_box: Node3D
+	if not single_step:
+		var blue_model: PackedScene = SorterField.CARGO_MODELS["blue"]
+		held_box = _find_scene_instance(robot.cargo_socket, blue_model.resource_path)
+		_expect(
+				was_carrying and cargo_color == "blue" and held_box != null,
+				"До принятия заказа робот держит синюю коробку"
+		)
 	code.text = source
 	var next_cell := robot.cell + Vector2i.UP
 	if single_step:
@@ -1223,16 +1231,27 @@ func _verify_order_acceptance(game: Control, single_step: bool) -> void:
 	)
 	if single_step:
 		return
+	_expect(
+			is_instance_valid(held_box) and held_box.get_parent() == robot.cargo_socket,
+			"После принятия заказа у робота остаётся та же коробка"
+	)
 	code.text = 'move("down")\nmove("down")\nput()'
 	_expect(
 			await _run_order_program(run, stop) and output.get_parsed_text().contains("нужна зона blue")
-			and progress.text == "Заказ: синие коробки — 0 из 3",
-			"После принятия прежняя клетка синей зоны больше не подходит"
+			and progress.text == "Заказ: синие коробки — 0 из 3"
+			and is_instance_valid(held_box) and held_box.get_parent() == robot.cargo_socket,
+			"Прежняя зона отклоняет доставку и оставляет ту же коробку у робота"
 	)
-	code.text = 'move("up")\nput()'
+	code.text = 'move("up")'
+	_expect(
+			await _run_order_program(run, stop) and robot.cell == upper_zone
+			and is_instance_valid(held_box) and held_box.get_parent() == robot.cargo_socket,
+			"Робот привозит исходную коробку в новую зону"
+	)
+	code.text = "put()"
 	_expect(
 			await _run_order_program(run, stop) and message.text == "Программа завершена."
-			and progress.text == "Заказ: синие коробки — 1 из 3",
+			and not field.carrying and progress.text == "Заказ: синие коробки — 1 из 3",
 			"Доставка в новую синюю зону продвигает второй заказ"
 	)
 
