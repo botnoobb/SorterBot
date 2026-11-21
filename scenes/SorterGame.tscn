@@ -194,6 +194,18 @@ layout_mode = 2
 autowrap_mode = 2
 mouse_filter = 2
 
+[node name="OrderRules" type="Label" parent="Lesson/Content"]
+visible = false
+layout_mode = 2
+autowrap_mode = 2
+mouse_filter = 2
+
+[node name="AcceptOrder" type="Button" parent="Lesson/Content"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+text = "Принять заказ"
+
 [node name="Details" type="RichTextLabel" parent="Lesson/Content"]
 visible = false
 layout_mode = 2
@@ -226,7 +238,7 @@ move(\"down\")
 move(\"down\")
 put()
 
-Пример ведёт в зону orange. Если на выдаче синяя коробка, добавьте move(\"down\") перед put(), чтобы попасть в зону blue.
+Пример ведёт в верхнюю зону. Чтобы попасть в нижнюю, добавьте move(\"down\") перед put(). Сверьтесь с правилами текущего заказа.
 
 Запустите её и нажмите «Стоп» (■) во время движения. Робот закончит текущую команду и остановится. Нажмите «Начать текущий груз заново». Выполните первую строку кнопкой «Шаг», дождитесь паузы и нажмите «Запустить». Робот продолжит со следующей строки и доставит коробку."
 

@@ -11,7 +11,8 @@ const REFERENCE_ANIMATION_DURATION := 0.22
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
 const FIRST_ORDER_COLOR := "orange"
-const FIRST_ORDER_TARGET := 3
+const SECOND_ORDER_COLOR := "blue"
+const ORDER_TARGET := 3
 # Габариты проекции рамы, конвейеров и робота с коробкой.
 const FIELD_PROJECTION_SIZE := Vector2(10.1, 5.0)
 const FIELD_PROJECTION_CENTER_X_OFFSET := -0.51
@@ -98,6 +99,8 @@ const FUNCTIONS_REFERENCE := (
 var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
+var _order_accept_requested: bool = false
+var _second_order_active: bool = false
 var _order_deliveries: int = 0
 var _field_zoom: float = 1.0
 var _field_pan := Vector2.ZERO
@@ -116,6 +119,8 @@ var _field_drag_position := Vector2.ZERO
 @onready var _lesson_title: Label = $Lesson/Content/Header/Title
 @onready var _lesson_toggle: Button = $Lesson/Content/Header/Toggle
 @onready var _order_progress: Label = $Lesson/Content/OrderProgress
+@onready var _order_rules: Label = $Lesson/Content/OrderRules
+@onready var _accept_order: Button = $Lesson/Content/AcceptOrder
 @onready var _reference_panel: Panel = $ReferencePanel
 @onready var _reference_compact_top: float = _reference_panel.offset_top
 @onready var _reference_sections: VBoxContainer = $ReferencePanel/Content/Sections
@@ -126,6 +131,7 @@ var _field_drag_position := Vector2.ZERO
 
 func _ready() -> void:
 	_field.cargo_delivered.connect(_on_cargo_delivered)
+	_accept_order.pressed.connect(_on_accept_order_pressed)
 	_update_order_progress()
 	_editor.run_requested.connect(_on_run_requested)
 	_editor.step_requested.connect(_on_step_requested)
@@ -240,7 +246,12 @@ func _fit_compact_lesson_height() -> void:
 func _frame_field() -> void:
 	var field_rect: Rect2 = _field_view.get_global_rect()
 	var lesson_margin: float = _lesson.get_theme_stylebox("panel").get_margin(SIDE_BOTTOM)
-	var top: float = _order_progress.get_global_rect().end.y - field_rect.position.y + lesson_margin
+	var compact_bottom: Control = _order_progress
+	if _accept_order.visible:
+		compact_bottom = _accept_order
+	elif _order_rules.visible:
+		compact_bottom = _order_rules
+	var top: float = compact_bottom.get_global_rect().end.y - field_rect.position.y + lesson_margin
 	var reference_top: float = field_rect.size.y + _reference_compact_top
 	var reference_right: float = _reference_panel.get_global_rect().end.x - field_rect.position.x
 	var above_reference := Rect2(0, top, field_rect.size.x, reference_top - top)
@@ -347,7 +358,7 @@ func _save_editor_width() -> void:
 
 
 func _on_run_requested(source: String) -> void:
-	if _cargo_reset_requested:
+	if _cargo_reset_requested or _order_accept_requested:
 		return
 	if _executor.is_running:
 		if _executor.is_paused:
@@ -359,7 +370,7 @@ func _on_run_requested(source: String) -> void:
 
 
 func _on_step_requested(source: String) -> void:
-	if _cargo_reset_requested:
+	if _cargo_reset_requested or _order_accept_requested:
 		return
 	if _executor.is_running:
 		if _executor.is_paused:
@@ -370,17 +381,48 @@ func _on_step_requested(source: String) -> void:
 
 func _on_cargo_delivered(color_name: String) -> void:
 	_goal.text = "Коробка доставлена"
-	if color_name == FIRST_ORDER_COLOR and _order_deliveries < FIRST_ORDER_TARGET:
+	var order_color := SECOND_ORDER_COLOR if _second_order_active else FIRST_ORDER_COLOR
+	if color_name == order_color and _order_deliveries < ORDER_TARGET:
 		_order_deliveries += 1
 		_update_order_progress()
 
 
 func _update_order_progress() -> void:
-	var count := "%d из %d" % [_order_deliveries, FIRST_ORDER_TARGET]
-	if _order_deliveries == FIRST_ORDER_TARGET:
-		_order_progress.text = "Заказ выполнен: %s оранжевых" % count
+	var count := "%d из %d" % [_order_deliveries, ORDER_TARGET]
+	if _order_deliveries == ORDER_TARGET:
+		var completed_color := "синих" if _second_order_active else "оранжевых"
+		_order_progress.text = "Заказ выполнен: %s %s" % [count, completed_color]
+		if not _second_order_active:
+			_order_rules.text = (
+					"Новый заказ на %d синие коробки. Зоны поменяются местами." % ORDER_TARGET
+			)
+			_order_rules.show()
+			_accept_order.show()
 	else:
-		_order_progress.text = "Заказ: оранжевые коробки — %s" % count
+		var color := "синие" if _second_order_active else "оранжевые"
+		_order_progress.text = "Заказ: %s коробки — %s" % [color, count]
+
+
+func _on_accept_order_pressed() -> void:
+	if not _accept_order.visible or _order_accept_requested:
+		return
+	_order_accept_requested = true
+	_accept_order.disabled = true
+	if _executor.is_running:
+		_executor.request_stop()
+		return
+	_accept_next_order()
+
+
+func _accept_next_order() -> void:
+	_field.swap_delivery_zones()
+	_second_order_active = true
+	_order_deliveries = 0
+	_update_order_progress()
+	_order_rules.text = "Синие коробки — верхняя зона, оранжевые — нижняя."
+	_accept_order.hide()
+	_editor.show_message("Заказ принят. Обновите программу и запустите её.")
+	_order_accept_requested = false
 
 
 func _on_cargo_reset_requested() -> void:
@@ -420,6 +462,10 @@ func _start_program(source: String, single_step: bool = false) -> void:
 	_editor.set_running(false)
 	if _cargo_reset_requested:
 		_reset_current_cargo()
+		if not _order_accept_requested:
+			return
+	if _order_accept_requested:
+		_accept_next_order()
 		return
 	if not _executor.action_error.is_empty():
 		_editor.show_action_error(_executor.action_error)

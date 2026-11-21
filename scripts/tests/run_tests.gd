@@ -4,6 +4,7 @@ const START_TO_INPUT := 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
 const INPUT_TO_ORANGE := (
 		'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
 )
+const INPUT_TO_LOWER_ZONE := INPUT_TO_ORANGE + 'move("down")\n'
 const ORANGE_TO_INPUT := (
 		'move("up")\nmove("up")\nmove("left")\nmove("left")\nmove("left")\nmove("left")\n'
 )
@@ -38,6 +39,7 @@ func _run() -> void:
 	):
 		if order_progress_requested:
 			await _test_order_progress()
+			await _test_step_order_acceptance()
 		elif input_tray_requested:
 			await _test_input_tray()
 		elif delivery_requested:
@@ -63,6 +65,7 @@ func _run() -> void:
 	await _test_conditions()
 	await _test_first_lesson()
 	await _test_order_progress()
+	await _test_step_order_acceptance()
 	_test_parser()
 	_test_print_parser()
 	await _test_execution()
@@ -1056,6 +1059,7 @@ func _test_order_progress() -> void:
 	root.add_child(game)
 	await process_frame
 	var progress: Label = game.get_node_or_null("Lesson/Content/OrderProgress")
+	var accept_order: Button = game.get_node_or_null("Lesson/Content/AcceptOrder")
 	_expect(
 			progress != null and progress.is_visible_in_tree()
 			and progress.text == "Заказ: оранжевые коробки — 0 из 3",
@@ -1065,6 +1069,10 @@ func _test_order_progress() -> void:
 		game.queue_free()
 		await process_frame
 		return
+	_expect(
+			accept_order != null and not accept_order.is_visible_in_tree(),
+			"Предложение следующего заказа скрыто при запуске"
+	)
 
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
 	var code: CodeEdit = content.get_node("Code")
@@ -1073,7 +1081,7 @@ func _test_order_progress() -> void:
 	var reset: Button = content.get_node("ResetCargo")
 	var message: Label = content.get_node("Message")
 	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
-	var deliver_blue := START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + 'move("down")\nput()'
+	var deliver_blue := START_TO_INPUT + "grab()\n" + INPUT_TO_LOWER_ZONE + "put()"
 	var empty_progress := "Заказ: оранжевые коробки — 0 из 3"
 	var first_delivery := "Заказ: оранжевые коробки — 1 из 3"
 	var second_delivery := "Заказ: оранжевые коробки — 2 из 3"
@@ -1119,8 +1127,136 @@ func _test_order_progress() -> void:
 				"После правильной доставки карточка показывает «%s»" % delivery[1]
 		)
 		reset.pressed.emit()
+	_expect(
+			accept_order != null and accept_order.is_visible_in_tree() and not accept_order.disabled,
+			"Выполнение первого заказа открывает кнопку принятия следующего"
+	)
+	await _verify_order_acceptance(game, false)
 	game.queue_free()
 	await process_frame
+
+
+func _test_step_order_acceptance() -> void:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	for destination: String in [
+		INPUT_TO_ORANGE, INPUT_TO_LOWER_ZONE, INPUT_TO_ORANGE, INPUT_TO_LOWER_ZONE, INPUT_TO_ORANGE,
+	]:
+		code.text = START_TO_INPUT + "grab()\n" + destination + "put()"
+		if not await _run_order_program(run, stop):
+			_expect(false, "Первый заказ выполнен перед проверкой пошагового принятия")
+			break
+		reset.pressed.emit()
+	await _verify_order_acceptance(game, true)
+	game.queue_free()
+	await process_frame
+
+
+func _verify_order_acceptance(game: Control, single_step: bool) -> void:
+	var progress: Label = game.get_node("Lesson/Content/OrderProgress")
+	var accept_order: Button = game.get_node_or_null("Lesson/Content/AcceptOrder")
+	var rules: Label = game.get_node_or_null("Lesson/Content/OrderRules")
+	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var step: Button = content.get_node("Header/Step")
+	var stop: Button = content.get_node("Header/Stop")
+	var message: Label = content.get_node("Message")
+	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	if accept_order == null or not accept_order.is_visible_in_tree() or rules == null:
+		_expect(false, "Карточка предлагает следующий заказ")
+		return
+	var upper_zone := Vector2i(4, 2)
+	var lower_zone := Vector2i(4, 3)
+	_expect(
+			progress.text == "Заказ выполнен: 3 из 3 оранжевых"
+			and rules.is_visible_in_tree() and rules.text.contains("3 синие коробки")
+			and _zones_match(field, upper_zone, lower_zone),
+			"Предложение показывает новый заказ и сохраняет прежние зоны до принятия"
+	)
+	if not single_step:
+		code.text = DELIVER_ORANGE
+		_expect(
+				await _run_order_program(run, stop)
+				and output.get_parsed_text().contains("нужна зона blue")
+				and progress.text == "Заказ выполнен: 3 из 3 оранжевых",
+				"Будущая клетка синей зоны отклоняет синюю коробку до принятия заказа"
+		)
+	var source := 'move("up")\nmove("up")\nprint("Старый запуск")'
+	var cargo_color := field.get_box_color()
+	var was_carrying := field.carrying
+	code.text = source
+	var next_cell := robot.cell + Vector2i.UP
+	if single_step:
+		step.pressed.emit()
+		var pause_deadline := create_timer(3.0)
+		while step.disabled and pause_deadline.time_left > 0.0:
+			await process_frame
+		_expect(not step.disabled and not stop.disabled, "Программа ждёт следующего шага")
+	else:
+		run.pressed.emit()
+		_expect(not stop.disabled, "Программа выполняется автоматически")
+	accept_order.pressed.emit()
+	var stop_deadline := create_timer(5.0)
+	while not stop.disabled and stop_deadline.time_left > 0.0:
+		await process_frame
+	await create_timer(0.5).timeout
+	_expect(
+			stop.disabled and robot.cell == next_cell and code.text == source
+			and field.get_box_color() == cargo_color and field.carrying == was_carrying,
+			"Принятие останавливает старый запуск после текущей инструкции и сохраняет код и груз"
+	)
+	_expect(
+			not accept_order.is_visible_in_tree()
+			and progress.text == "Заказ: синие коробки — 0 из 3"
+			and rules.text.contains("Синие") and rules.text.contains("верхняя")
+			and message.text.contains("Заказ принят") and _zones_match(field, lower_zone, upper_zone),
+			"После принятия видны новые правила, цветные плитки и подписи поменялись местами"
+	)
+	if single_step:
+		return
+	code.text = 'move("down")\nmove("down")\nput()'
+	_expect(
+			await _run_order_program(run, stop) and output.get_parsed_text().contains("нужна зона blue")
+			and progress.text == "Заказ: синие коробки — 0 из 3",
+			"После принятия прежняя клетка синей зоны больше не подходит"
+	)
+	code.text = 'move("up")\nput()'
+	_expect(
+			await _run_order_program(run, stop) and message.text == "Программа завершена."
+			and progress.text == "Заказ: синие коробки — 1 из 3",
+			"Доставка в новую синюю зону продвигает второй заказ"
+	)
+
+
+func _zones_match(field: SorterField, orange: Vector2i, blue: Vector2i) -> bool:
+	var tiles_match := true
+	for tile: Array in [
+		["res://assets/models/field/direction_tile.glb", orange],
+		["res://assets/models/field/direction_tile_blue.glb", blue],
+	]:
+		var model := _find_scene_instance(field, tile[0])
+		var cell: Vector2i = tile[1]
+		tiles_match = tiles_match and model != null and model.global_position.is_equal_approx(
+				field.to_global(Vector3(cell.x, -0.15, cell.y))
+		)
+	var labels_match := 0
+	for label: Label3D in field.find_children("*", "Label3D", true, false):
+		for zone: Array in [["orange", orange], ["blue", blue]]:
+			var cell: Vector2i = zone[1]
+			if label.text == zone[0] and label.global_position.is_equal_approx(
+					field.to_global(Vector3(cell.x, 0.1, cell.y - 0.5))
+			):
+				labels_match += 1
+	return tiles_match and labels_match == 2
 
 
 func _run_order_program(run: Button, stop: Button) -> bool:

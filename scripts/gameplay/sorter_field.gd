@@ -16,10 +16,9 @@ const CARGO_MODELS := {
 	"orange": preload("res://assets/models/cargo/parcel.glb"),
 	"blue": preload("res://assets/models/cargo/parcel_blue.glb"),
 }
-const ZONES_BY_COLOR := {"orange": ZONE_CELL, "blue": BLUE_ZONE_CELL}
 const ZONE_TILES := {
-	ZONE_CELL: preload("res://assets/models/field/direction_tile.glb"),
-	BLUE_ZONE_CELL: preload("res://assets/models/field/direction_tile_blue.glb"),
+	"orange": preload("res://assets/models/field/direction_tile.glb"),
+	"blue": preload("res://assets/models/field/direction_tile_blue.glb"),
 }
 
 var carrying: bool = false
@@ -28,6 +27,8 @@ var delivered: bool = false
 var _cargo: Node3D
 var _input_feed: Tween
 var _box_color_name: String = "orange"
+var _zones_by_color: Dictionary[String, Vector2i] = { "orange": ZONE_CELL, "blue": BLUE_ZONE_CELL }
+var _delivery_zones: Dictionary[String, Node3D] = {}
 
 @onready var _robot: SorterRobot = $Robot
 @onready var _input_conveyor: SorterConveyor = $InputConveyor
@@ -41,25 +42,33 @@ var _box_color_name: String = "orange"
 
 
 func _ready() -> void:
+	var zone_cells := _zones_by_color.values()
 	for x: int in range(FIELD_SIZE):
 		for y: int in range(FIELD_SIZE):
-			var tile_scene: PackedScene = ZONE_TILES.get(Vector2i(x, y), FLOOR_TILE)
-			var tile: Node3D = tile_scene.instantiate()
-			# Совмещаем поверхность плитки с уровнем движения робота.
-			tile.position = Vector3(x, -0.15, y)
-			tile.scale = Vector3(0.98, 1, 0.98)
-			add_child(tile)
+			if Vector2i(x, y) not in zone_cells:
+				_add_floor_tile(self, FLOOR_TILE, Vector3(x, 0, y))
 
 	_box(Vector3(CARGO_CELL.x, 0, CARGO_CELL.y), Vector3(0.9, 0.04, 0.9), Color(0.3, 0.5, 0.9))
-	for color_name: String in ZONES_BY_COLOR:
-		var zone: Vector2i = ZONES_BY_COLOR[color_name]
-		_add_label(color_name, Vector3(zone.x, 0.1, zone.y - 0.5))
-	_add_label("Выдача", Vector3(CARGO_CELL.x, 0.1, CARGO_CELL.y - 0.5))
+	for color_name: String in _zones_by_color:
+		var zone := Node3D.new()
+		add_child(zone)
+		_delivery_zones[color_name] = zone
+		_add_floor_tile(zone, ZONE_TILES[color_name], Vector3.ZERO)
+		_add_label(zone, color_name, Vector3(0, 0.1, -0.5))
+	_position_delivery_zones()
+	_add_label(self, "Выдача", Vector3(CARGO_CELL.x, 0.1, CARGO_CELL.y - 0.5))
 	_spawn_cargo()
 
 
 func get_box_color() -> String:
 	return _box_color_name
+
+
+func swap_delivery_zones() -> void:
+	var orange_cell := _zones_by_color["orange"]
+	_zones_by_color["orange"] = _zones_by_color["blue"]
+	_zones_by_color["blue"] = orange_cell
+	_position_delivery_zones()
 
 
 func reset_current_cargo() -> bool:
@@ -94,15 +103,29 @@ func perform(command: ProgramCommand, duration: float) -> String:
 	elif command.type == ProgramCommand.Type.PUT:
 		if not carrying:
 			return "У робота нет коробки."
-		if _robot.cell not in ZONES_BY_COLOR.values():
+		if not _output_conveyors.has(_robot.cell):
 			return "Коробку нужно положить в зоне доставки."
-		if _robot.cell != ZONES_BY_COLOR[_box_color_name]:
+		if _robot.cell != _zones_by_color[_box_color_name]:
 			return "Этой коробке нужна зона %s." % _box_color_name
 		await _robot.face(Vector2i.RIGHT, duration)
 		await _deliver_cargo(_output_conveyors[_robot.cell])
 	else:
 		return "Неизвестное игровое действие."
 	return ""
+
+
+func _position_delivery_zones() -> void:
+	for color_name: String in _zones_by_color:
+		var cell := _zones_by_color[color_name]
+		_delivery_zones[color_name].position = Vector3(cell.x, 0, cell.y)
+
+
+func _add_floor_tile(parent: Node3D, scene: PackedScene, location: Vector3) -> void:
+	var tile: Node3D = scene.instantiate()
+	# Совмещаем поверхность плитки с уровнем движения робота.
+	tile.position = location - Vector3(0, 0.15, 0)
+	tile.scale = Vector3(0.98, 1, 0.98)
+	parent.add_child(tile)
 
 
 func _attach_cargo() -> void:
@@ -157,13 +180,13 @@ func _spawn_cargo() -> void:
 	)
 
 
-func _add_label(text: String, location: Vector3) -> void:
+func _add_label(parent: Node3D, text: String, location: Vector3) -> void:
 	var label := Label3D.new()
 	label.text = text
 	label.position = location
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 32
-	add_child(label)
+	parent.add_child(label)
 
 
 func _box(location: Vector3, dimensions: Vector3, color: Color) -> MeshInstance3D:
