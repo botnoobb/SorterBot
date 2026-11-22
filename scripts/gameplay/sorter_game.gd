@@ -100,7 +100,7 @@ var _parser := ProgramParser.new()
 var _executor := ProgramExecutor.new()
 var _cargo_reset_requested: bool = false
 var _order_accept_requested: bool = false
-var _second_order_active: bool = false
+var _order_color: String = FIRST_ORDER_COLOR
 var _order_deliveries: int = 0
 var _field_zoom: float = 1.0
 var _field_pan := Vector2.ZERO
@@ -130,6 +130,7 @@ var _field_drag_position := Vector2.ZERO
 
 
 func _ready() -> void:
+	_field.preferred_cargo_color = _order_color
 	_field.cargo_delivered.connect(_on_cargo_delivered)
 	_accept_order.pressed.connect(_on_accept_order_pressed)
 	_update_order_progress()
@@ -381,25 +382,25 @@ func _on_step_requested(source: String) -> void:
 
 func _on_cargo_delivered(color_name: String) -> void:
 	_goal.text = "Коробка доставлена"
-	var order_color := SECOND_ORDER_COLOR if _second_order_active else FIRST_ORDER_COLOR
-	if color_name == order_color and _order_deliveries < ORDER_TARGET:
+	if color_name == _order_color and _order_deliveries < ORDER_TARGET:
 		_order_deliveries += 1
 		_update_order_progress()
 
 
 func _update_order_progress() -> void:
 	var count := "%d из %d" % [_order_deliveries, ORDER_TARGET]
+	var is_second_order := _order_color == SECOND_ORDER_COLOR
 	if _order_deliveries == ORDER_TARGET:
-		var completed_color := "синих" if _second_order_active else "оранжевых"
+		var completed_color := "синих" if is_second_order else "оранжевых"
 		_order_progress.text = "Заказ выполнен: %s %s" % [count, completed_color]
-		if not _second_order_active:
+		if _order_color == FIRST_ORDER_COLOR:
 			_order_rules.text = (
 					"Новый заказ на %d синие коробки. Зоны поменяются местами." % ORDER_TARGET
 			)
 			_order_rules.show()
 			_accept_order.show()
 	else:
-		var color := "синие" if _second_order_active else "оранжевые"
+		var color := "синие" if is_second_order else "оранжевые"
 		_order_progress.text = "Заказ: %s коробки — %s" % [color, count]
 
 
@@ -416,7 +417,8 @@ func _on_accept_order_pressed() -> void:
 
 func _accept_next_order() -> void:
 	_field.swap_delivery_zones()
-	_second_order_active = true
+	_order_color = SECOND_ORDER_COLOR
+	_field.preferred_cargo_color = _order_color
 	_order_deliveries = 0
 	_update_order_progress()
 	_order_rules.text = "Синие коробки — верхняя зона, оранжевые — нижняя."

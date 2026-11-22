@@ -1,5 +1,6 @@
 extends SceneTree
 
+const CargoGenerator = preload("res://scripts/gameplay/cargo_generator.gd")
 const START_TO_INPUT := 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
 const INPUT_TO_ORANGE := (
 		'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
@@ -25,6 +26,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var arguments := OS.get_cmdline_user_args()
+	var cargo_generation_requested := arguments.has("--cargo-generation")
 	var robot_turns_requested := arguments.has("--robot-turns")
 	var delivery_requested := arguments.has("--delivery")
 	var input_tray_requested := arguments.has("--input-tray")
@@ -35,9 +37,11 @@ func _run() -> void:
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
-			or order_progress_requested
+			or order_progress_requested or cargo_generation_requested
 	):
-		if order_progress_requested:
+		if cargo_generation_requested:
+			_test_cargo_generation()
+		elif order_progress_requested:
 			await _test_order_progress()
 			await _test_step_order_acceptance()
 		elif input_tray_requested:
@@ -59,6 +63,7 @@ func _run() -> void:
 		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 		quit(1 if _failures > 0 else 0)
 		return
+	_test_cargo_generation()
 	await _test_variables()
 	await _test_while()
 	await _test_functions()
@@ -82,6 +87,63 @@ func _run() -> void:
 	await _test_reset_cargo()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
+
+
+func _test_cargo_generation() -> void:
+	var colors: Array[String] = ["orange", "blue", "a", "b", "c", "d", "e", "f"]
+	for color_count: int in [2, 6, 8]:
+		var available := colors.slice(0, color_count)
+		var random := RandomNumberGenerator.new()
+		random.seed = 42
+		var generator := CargoGenerator.new(available, random)
+		var window := 6 if color_count == 2 else color_count * 2
+		var seen: Dictionary[String, int] = {}
+		var covers_every_window := true
+		for index: int in range(300):
+			var color: String = generator.next_color("orange")
+			seen[color] = index
+			for candidate: String in available:
+				covers_every_window = (
+						covers_every_window and index - seen.get(candidate, -1) < window
+				)
+		_expect(
+				covers_every_window and seen.size() == color_count,
+				"Покрываются все виды грузов при числе видов %d" % color_count
+		)
+	_test_cargo_weights()
+
+
+func _test_cargo_weights() -> void:
+	var first_draw_matches := true
+	var next_draw_matches := true
+	var first_colors: Dictionary[String, bool] = {}
+	for sample_seed: int in range(128):
+		var random := RandomNumberGenerator.new()
+		var expected_random := RandomNumberGenerator.new()
+		random.seed = sample_seed
+		expected_random.seed = sample_seed
+		var generator := CargoGenerator.new(["orange", "blue"], random, "orange")
+		# Учебная выдача увеличила вес синей до 2, вес нужной оранжевой равен 2.
+		var expected_first := "orange" if expected_random.randi_range(1, 4) <= 2 else "blue"
+		var first := generator.next_color("orange")
+		first_colors[first] = true
+		first_draw_matches = first_draw_matches and first == expected_first
+		# Второй заказ отдаёт предпочтение синей. После оранжевой веса 1:4, после синей 2:2.
+		var next_roll := expected_random.randi_range(1, 5 if expected_first == "orange" else 4)
+		var orange_weight := 1 if expected_first == "orange" else 2
+		var expected_next := "orange" if next_roll <= orange_weight else "blue"
+		var next := generator.next_color("blue")
+		next_draw_matches = next_draw_matches and next == expected_next
+	_expect(first_draw_matches and first_colors.size() == 2, "Веса определяют случайную выдачу")
+	_expect(next_draw_matches, "Смена заказа меняет базовые веса и сохраняет бонусы за пропуски")
+
+
+func _instantiate_game_with_known_cargo() -> Control:
+	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	# Начальное значение даёт оба цвета в нужном порядке для проверок маршрутов.
+	field.cargo_random.seed = 74
+	return game
 
 
 func _test_robot_turns() -> void:
@@ -427,8 +489,7 @@ func _test_syntax_highlighting() -> void:
 
 
 func _test_functions() -> void:
-	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
-	var game: Control = packed.instantiate()
+	var game := _instantiate_game_with_known_cargo()
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
@@ -595,8 +656,7 @@ func _test_functions() -> void:
 
 
 func _test_while() -> void:
-	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
-	var game: Control = packed.instantiate()
+	var game := _instantiate_game_with_known_cargo()
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
@@ -685,8 +745,7 @@ func _test_while() -> void:
 
 
 func _test_conditions() -> void:
-	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
-	var game: Control = packed.instantiate()
+	var game := _instantiate_game_with_known_cargo()
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
@@ -1055,7 +1114,7 @@ func _play_first_lesson(game: Control, goal: Label, delivery_program: String) ->
 
 
 func _test_order_progress() -> void:
-	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	var game := _instantiate_game_with_known_cargo()
 	root.add_child(game)
 	await process_frame
 	var progress: Label = game.get_node_or_null("Lesson/Content/OrderProgress")
@@ -1137,7 +1196,7 @@ func _test_order_progress() -> void:
 
 
 func _test_step_order_acceptance() -> void:
-	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
+	var game := _instantiate_game_with_known_cargo()
 	root.add_child(game)
 	await process_frame
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
@@ -1254,6 +1313,10 @@ func _verify_order_acceptance(game: Control, single_step: bool) -> void:
 			and not field.carrying and progress.text == "Заказ: синие коробки — 1 из 3",
 			"Доставка в новую синюю зону продвигает второй заказ"
 	)
+	_expect(
+			field.get_box_color() == "blue",
+			"Для заданной выборки следующая коробка синяя только с весами второго заказа"
+	)
 
 
 func _zones_match(field: SorterField, orange: Vector2i, blue: Vector2i) -> bool:
@@ -1353,8 +1416,7 @@ func _click_reference_button(button: Button) -> void:
 
 
 func _test_scene() -> void:
-	var packed: PackedScene = load("res://scenes/SorterGame.tscn")
-	var game: Control = packed.instantiate()
+	var game := _instantiate_game_with_known_cargo()
 	root.add_child(game)
 	await process_frame
 	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")

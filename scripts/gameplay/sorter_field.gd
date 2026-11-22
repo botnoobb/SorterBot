@@ -4,6 +4,7 @@ class_name SorterField
 signal cargo_delivered(color_name: String)
 
 const FIELD_SIZE := 5
+const CargoGenerator = preload("res://scripts/gameplay/cargo_generator.gd")
 const FLOOR_TILE := preload("res://assets/models/field/floor_tile.glb")
 const CARGO_CELL := Vector2i(0, 0)
 const ZONE_CELL := Vector2i(4, 2)
@@ -12,7 +13,7 @@ const INPUT_FEED_DURATION := 2.75
 const INPUT_DROP_DURATION := 0.35
 const OUTPUT_CARGO_END := Vector3(0.97, 0.592, 0)
 const OUTPUT_FEED_DURATION := 0.8
-const CARGO_MODELS := {
+const CARGO_MODELS: Dictionary[String, PackedScene] = {
 	"orange": preload("res://assets/models/cargo/parcel.glb"),
 	"blue": preload("res://assets/models/cargo/parcel_blue.glb"),
 }
@@ -24,6 +25,9 @@ const ZONE_TILES := {
 var carrying: bool = false
 # Результат доставки сохраняется до захвата следующей коробки.
 var delivered: bool = false
+var cargo_random := RandomNumberGenerator.new()
+var preferred_cargo_color: String
+var _cargo_generator: CargoGenerator
 var _cargo: Node3D
 var _input_feed: Tween
 var _box_color_name: String = "orange"
@@ -42,6 +46,7 @@ var _delivery_zones: Dictionary[String, Node3D] = {}
 
 
 func _ready() -> void:
+	_cargo_generator = CargoGenerator.new(CARGO_MODELS.keys(), cargo_random, _box_color_name)
 	var zone_cells := _zones_by_color.values()
 	for x: int in range(FIELD_SIZE):
 		for y: int in range(FIELD_SIZE):
@@ -143,7 +148,7 @@ func _deliver_cargo(conveyor: SorterConveyor) -> void:
 	remove_child(_cargo)
 	_cargo.queue_free()
 	var delivered_color := _box_color_name
-	_box_color_name = "blue" if _box_color_name == "orange" else "orange"
+	_box_color_name = _cargo_generator.next_color(preferred_cargo_color)
 	_spawn_cargo()
 	cargo_delivered.emit(delivered_color)
 
