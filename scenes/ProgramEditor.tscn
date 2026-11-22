@@ -62,6 +62,7 @@ layout_mode = 2
 size_flags_vertical = 3
 split_offsets = PackedInt32Array(-60)
 theme_override_constants/autohide = 0
+theme_override_constants/separation = 6
 
 [node name="Code" type="CodeEdit" parent="Margin/Content/EditorSplit"]
 custom_minimum_size = Vector2(0, 180)

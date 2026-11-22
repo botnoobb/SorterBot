@@ -1530,33 +1530,30 @@ func _test_output_panel() -> void:
 	editor.append_output("Первое сообщение")
 	await process_frame
 	await process_frame
+	_expect(
+			toggle.text == "Вывод" and output.position.y - code.get_rect().end.y <= 8.0,
+			"Между кодом и выводом узкий разделитель, заголовок без стрелки"
+	)
 	var initial_output_height := output.size.y
-	_drag_output_boundary(code, output, -game.size.y)
-	await process_frame
-	await process_frame
+	await _drag_output_boundary(code, output, -game.size.y)
 	_expect(
 			is_equal_approx(code.size.y, 180.0) and output.size.y > initial_output_height,
 			"Перетаскивание вверх увеличивает вывод и сохраняет минимум поля кода"
 	)
-	_drag_output_boundary(code, output, game.size.y)
-	await process_frame
-	await process_frame
+	await _drag_output_boundary(code, output, output.size.y - 80.0)
 	_expect(
 			is_equal_approx(output.size.y, 120.0) and code.size.y > 180.0,
 			"Перетаскивание вниз сохраняет минимум панели вывода"
 	)
-	_drag_output_boundary(code, output, -40.0)
-	await process_frame
-	await process_frame
+	await _drag_output_boundary(code, output, -40.0)
 	_expect(is_equal_approx(output.size.y, 160.0), "Граница следует за мышью")
 	var expanded_code_height := code.size.y
-	_click_button(toggle)
-	await process_frame
-	await process_frame
+	await _drag_output_boundary(code, output, output.size.y - 24.0)
 	_expect(
-			toggle.is_visible_in_tree() and not messages.is_visible_in_tree()
+			toggle.is_visible_in_tree() and toggle.text == "Вывод"
+			and not messages.is_visible_in_tree()
 			and code.size.y > expanded_code_height,
-			"При сворачивании вывода заголовок остаётся, а поле кода увеличивается"
+			"Перетаскивание к нижнему краю оставляет заголовок и увеличивает поле кода"
 	)
 	_click_button(toggle)
 	await process_frame
@@ -1566,6 +1563,11 @@ func _test_output_panel() -> void:
 			and is_equal_approx(output.size.y, 160.0),
 			"Повторное раскрытие сохраняет сообщения и выбранную высоту"
 	)
+	var down := Vector2(0.0, 2.0)
+	_move_mouse_at(_output_boundary_position(code, output) + down, down, 0)
+	await process_frame
+	await process_frame
+	_expect(is_equal_approx(output.size.y, 160.0), "Наведение на границу не меняет высоту")
 	_click_button(toggle)
 	editor.append_output("Второе сообщение")
 	_expect(
@@ -1605,13 +1607,21 @@ func _test_output_panel() -> void:
 
 
 func _drag_output_boundary(code: CodeEdit, output: OutputPanel, distance: float) -> void:
-	var position := code.get_global_rect().get_center()
-	position.y = (code.get_global_rect().end.y + output.get_global_rect().position.y) * 0.5
+	var position := _output_boundary_position(code, output)
 	var motion := Vector2(0.0, distance)
 	_move_mouse_at(position, Vector2.ZERO, 0)
 	_push_mouse_button(position, MOUSE_BUTTON_LEFT, true)
 	_move_mouse_at(position + motion, motion, MOUSE_BUTTON_MASK_LEFT)
+	await process_frame
 	_push_mouse_button(position + motion, MOUSE_BUTTON_LEFT, false)
+	await process_frame
+	await process_frame
+
+
+func _output_boundary_position(code: CodeEdit, output: OutputPanel) -> Vector2:
+	var code_rect := code.get_global_rect()
+	var boundary_y := (code_rect.end.y + output.get_global_rect().position.y) * 0.5
+	return Vector2(code_rect.get_center().x, boundary_y)
 
 
 func _test_scene() -> void:

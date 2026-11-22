@@ -51,15 +51,18 @@ func append_action_error(message: String) -> void:
 	_messages.pop()
 
 
+func set_collapsed(collapsed: bool) -> void:
+	_title.button_pressed = collapsed
+
+
 func _reveal() -> void:
-	_title.button_pressed = false
+	set_collapsed(false)
 	show()
 
 
 func _apply_collapsed(collapsed: bool) -> void:
 	_messages.visible = not collapsed
 	custom_minimum_size.y = 0 if collapsed else EXPANDED_MINIMUM_HEIGHT
-	_title.text = "▸ Вывод" if collapsed else "▾ Вывод"
 	_title.tooltip_text = "Раскрыть вывод" if collapsed else "Свернуть вывод"
 
 

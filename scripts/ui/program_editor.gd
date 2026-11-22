@@ -7,11 +7,13 @@ signal step_requested(source: String)
 signal cargo_reset_requested()
 
 const EXECUTION_COLOR := Color(1.0, 0.85, 0.25, 0.22)
+const OUTPUT_COLLAPSE_DISTANCE := 48.0
 const ProgramSyntaxHighlighter = preload("res://scripts/ui/program_syntax_highlighter.gd")
 
 var _error_line: int = -1
 var _running: bool = false
 var _execution_line: int = -1
+var _output_drag_start_offset: int = 0
 
 @onready var _editor_split: VSplitContainer = $Margin/Content/EditorSplit
 @onready var _code: CodeEdit = $Margin/Content/EditorSplit/Code
@@ -27,6 +29,8 @@ func _ready() -> void:
 	_code.syntax_highlighter = ProgramSyntaxHighlighter.new()
 	_output.error_location_clicked.connect(_on_error_location_clicked)
 	_output.collapse_changed.connect(_on_output_collapse_changed)
+	var drag_area := _editor_split.get_drag_area_controls()[0]
+	drag_area.gui_input.connect(_on_output_drag_input.bind(drag_area))
 	_run_button.pressed.connect(_on_run_pressed)
 	_stop_button.pressed.connect(_on_stop_pressed)
 	_code.text_changed.connect(_on_text_changed)
@@ -128,6 +132,25 @@ func _on_output_collapse_changed(collapsed: bool) -> void:
 			SplitContainer.DRAGGER_HIDDEN_COLLAPSED
 			if collapsed else SplitContainer.DRAGGER_VISIBLE
 	)
+
+
+func _on_output_drag_input(event: InputEvent, drag_area: Control) -> void:
+	var button := event as InputEventMouseButton
+	if button == null or button.button_index != MOUSE_BUTTON_LEFT or button.is_canceled():
+		return
+	if button.pressed:
+		_output_drag_start_offset = _editor_split.split_offsets[0]
+		return
+	var release_position := drag_area.get_transform() * button.position
+	var distance_to_bottom := _editor_split.size.y - release_position.y
+	if distance_to_bottom <= OUTPUT_COLLAPSE_DISTANCE:
+		# Разделитель сначала должен обработать отпускание кнопки.
+		_collapse_output_after_drag.call_deferred(_output_drag_start_offset)
+
+
+func _collapse_output_after_drag(previous_offset: int) -> void:
+	_editor_split.split_offsets = PackedInt32Array([previous_offset])
+	_output.set_collapsed(true)
 
 
 func _on_error_location_clicked(line: int, column: int) -> void:
