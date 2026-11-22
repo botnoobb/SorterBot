@@ -1,0 +1,167 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/settings_panel.gd" id="1"]
+[ext_resource type="Theme" path="res://assets/editor_theme.tres" id="2"]
+
+[sub_resource type="StyleBoxFlat" id="Panel"]
+content_margin_left = 24.0
+content_margin_top = 20.0
+content_margin_right = 24.0
+content_margin_bottom = 20.0
+bg_color = Color(0.055, 0.095, 0.16, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.24, 0.47, 0.72, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="ButtonGroup" id="EditorSide"]
+
+[node name="SettingsPanel" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2")
+script = ExtResource("1")
+
+[node name="Shade" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.016, 0.03, 0.06, 0.62)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Dialog" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(510, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("Panel")
+
+[node name="Content" type="VBoxContainer" parent="Center/Dialog"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Center/Dialog/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Настройки"
+
+[node name="EditorSide" type="HBoxContainer" parent="Center/Dialog/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="Center/Dialog/Content/EditorSide"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Сторона редактора"
+
+[node name="Left" type="Button" parent="Center/Dialog/Content/EditorSide"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(86, 34)
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+toggle_mode = true
+button_group = SubResource("EditorSide")
+text = "Слева"
+
+[node name="Right" type="Button" parent="Center/Dialog/Content/EditorSide"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(86, 34)
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+toggle_mode = true
+button_pressed = true
+button_group = SubResource("EditorSide")
+text = "Справа"
+
+[node name="TextSize" type="HBoxContainer" parent="Center/Dialog/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="Center/Dialog/Content/TextSize"]
+layout_mode = 2
+text = "Размер текста"
+
+[node name="Decrease" type="Button" parent="Center/Dialog/Content/TextSize"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 34)
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+tooltip_text = "Уменьшить размер текста (Ctrl+−)"
+text = "−"
+
+[node name="SizeSlider" type="HSlider" parent="Center/Dialog/Content/TextSize"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+accessibility_name = "Размер текста"
+
+[node name="Increase" type="Button" parent="Center/Dialog/Content/TextSize"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 34)
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+tooltip_text = "Увеличить размер текста (Ctrl++)"
+text = "+"
+
+[node name="SizeEntry" type="LineEdit" parent="Center/Dialog/Content/TextSize"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 34)
+layout_mode = 2
+accessibility_name = "Размер текста в пикселях"
+alignment = 1
+
+[node name="Reset" type="Button" parent="Center/Dialog/Content/TextSize"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+theme_type_variation = &"ReferenceButton"
+text = "Сбросить"
+
+[node name="Separator" type="HSeparator" parent="Center/Dialog/Content"]
+layout_mode = 2
+
+[node name="Shortcuts" type="VBoxContainer" parent="Center/Dialog/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Center/Dialog/Content/Shortcuts"]
+layout_mode = 2
+text = "Горячие клавиши"
+
+[node name="ShortcutList" type="GridContainer" parent="Center/Dialog/Content/Shortcuts"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 14
+theme_override_constants/v_separation = 3
+columns = 2
+
+[node name="Close" type="Button" parent="Center/Dialog/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 36)
+layout_mode = 2
+size_flags_horizontal = 8
+theme_type_variation = &"ReferenceButton"
+tooltip_text = "Закрыть настройки (Esc)"
+text = "Закрыть"

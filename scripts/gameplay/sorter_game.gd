@@ -3,6 +3,11 @@ extends Control
 const EDITOR_LAYOUT_PATH := "user://editor_layout.cfg"
 const EDITOR_LAYOUT_SECTION := "editor"
 const EDITOR_WIDTH_KEY := "width"
+const EDITOR_ON_LEFT_KEY := "on_left"
+const EDITOR_TEXT_SIZE_KEY := "text_size"
+const TEXT_SIZE_STEP := 2
+const KEYBOARD_RESIZE_STEP := 24
+const FIELD_OVERLAY_MARGIN := 16.0
 const DIVIDER_LINE_COLOR := Color("#243953")
 const DIVIDER_HANDLE_COLOR := Color("#537da9")
 const DIVIDER_HANDLE_HOVER_COLOR := Color("#82b4e8")
@@ -124,6 +129,11 @@ var _field_drag_button: MouseButton = MOUSE_BUTTON_NONE
 var _field_drag_position := Vector2.ZERO
 var _reference_template: String
 
+var _editor_config := ConfigFile.new()
+var _editor_on_left: bool = false
+var _editor_text_size: int = SettingsPanel.DEFAULT_TEXT_SIZE
+var _focus_before_settings: Control
+
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
 @onready var _goal: Label = $Lesson/Content/Goal
@@ -140,6 +150,9 @@ var _reference_template: String
 @onready var _accept_order: Button = $Lesson/Content/AcceptOrder
 @onready var _reference_panel: Panel = $ReferencePanel
 @onready var _reference_toggle: Button = $ReferenceToggle
+@onready var _settings_button: Button = $SettingsButton
+@onready var _settings: SettingsPanel = $SettingsPanel
+@onready var _editor_divider: Control = _layout.get_drag_area_controls()[0]
 @onready var _reference_sections: ScrollContainer = $ReferencePanel/Content/Sections
 @onready var _reference_detail: VBoxContainer = $ReferencePanel/Content/Detail
 @onready var _reference_article: RichTextLabel = $ReferencePanel/Content/Detail/Article
@@ -159,12 +172,25 @@ func _ready() -> void:
 	_executor.pause_changed.connect(_editor.set_paused)
 	_executor.step_started.connect(_editor.highlight_execution_line)
 
-	var drag_area: Control = _layout.get_drag_area_controls()[0]
-	drag_area.draw.connect(_draw_editor_divider.bind(drag_area))
-	drag_area.mouse_entered.connect(drag_area.queue_redraw)
-	drag_area.mouse_exited.connect(drag_area.queue_redraw)
+	_editor_divider.focus_mode = Control.FOCUS_ALL
+	_editor_divider.tooltip_text = "Ширина редактора (F7, ← / →)"
+	_editor_divider.draw.connect(_draw_editor_divider.bind(_editor_divider))
+	_editor_divider.mouse_entered.connect(_editor_divider.queue_redraw)
+	_editor_divider.mouse_exited.connect(_editor_divider.queue_redraw)
+	_editor_divider.focus_entered.connect(_editor_divider.queue_redraw)
+	_editor_divider.focus_exited.connect(_editor_divider.queue_redraw)
+	_editor_divider.gui_input.connect(_on_editor_divider_input)
 	_layout.drag_ended.connect(_save_editor_width, CONNECT_DEFERRED)
-	_restore_editor_width.call_deferred()
+	_restore_editor_preferences()
+
+	_settings_button.pressed.connect(_toggle_settings)
+	_settings.editor_side_changed.connect(_on_editor_side_changed)
+	_settings.text_size_changed.connect(_set_editor_text_size)
+	_settings.text_size_step_requested.connect(_step_editor_text_size)
+	_settings.text_size_reset_requested.connect(
+			_set_editor_text_size.bind(SettingsPanel.DEFAULT_TEXT_SIZE)
+	)
+	_settings.closed.connect(_restore_settings_focus)
 
 	_reference_toggle.toggled.connect(_toggle_reference)
 	var sections: VBoxContainer = _reference_sections.get_node("List")
@@ -177,7 +203,7 @@ func _ready() -> void:
 	$ReferencePanel/Content/Detail/Back.pressed.connect(_show_reference_sections)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
 	_field_view.gui_input.connect(_on_field_gui_input)
-	_field_view.resized.connect(_resize_overlays, CONNECT_DEFERRED)
+	_field_view.item_rect_changed.connect(_resize_overlays, CONNECT_DEFERRED)
 	_editor.resized.connect(_resize_overlays, CONNECT_DEFERRED)
 	_lesson.minimum_size_changed.connect(_fit_compact_lesson_height)
 	_resize_overlays.call_deferred()
@@ -188,7 +214,36 @@ func _notification(what: int) -> void:
 		_field_drag_button = MOUSE_BUTTON_NONE
 
 
+func _input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return
+	if key.ctrl_pressed and not key.alt_pressed and not key.meta_pressed:
+		if _handle_text_size_shortcut(key):
+			get_viewport().set_input_as_handled()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return
+	if key.alt_pressed or key.meta_pressed or key.ctrl_pressed:
+		return
+	if key.keycode == KEY_ESCAPE and not key.shift_pressed:
+		_toggle_settings()
+	elif _settings.visible:
+		return
+	elif key.keycode == KEY_F7 and not key.shift_pressed:
+		_cycle_editor_focus()
+	elif not _editor.handle_program_shortcut(key):
+		return
+	get_viewport().set_input_as_handled()
+
+
 func _on_field_gui_input(event: InputEvent) -> void:
+	if _settings.visible:
+		_field_view.accept_event()
+		return
 	if event is InputEventMouseMotion and _field_drag_button != MOUSE_BUTTON_NONE:
 		_field_pan += event.position - _field_drag_position
 		_field_drag_position = event.position
@@ -224,13 +279,17 @@ func _zoom_field(event: InputEventMouseButton) -> void:
 
 
 func _resize_overlays() -> void:
-	_reference_panel.offset_right = _reference_panel.offset_left + minf(
-			REFERENCE_MAX_WIDTH, _field_view.size.x - 2.0 * _reference_panel.offset_left
-	)
+	var field_left := _field_view.position.x + FIELD_OVERLAY_MARGIN
+	var field_width := _field_view.size.x - 2.0 * FIELD_OVERLAY_MARGIN
+	_reference_toggle.position.x = field_left
+	_reference_panel.position.x = field_left
+	_reference_panel.size.x = minf(REFERENCE_MAX_WIDTH, field_width)
 	_reference_panel.offset_top = (
 			_reference_panel.offset_bottom - floorf(_field_view.size.y * REFERENCE_HEIGHT_RATIO)
 	)
-	var available_width := _field_view.size.x - 2.0 * _lesson.offset_left
+	_settings_button.position.x = field_left + field_width - _settings_button.size.x
+	_lesson.position.x = field_left
+	var available_width := field_width - _settings_button.size.x - FIELD_OVERLAY_MARGIN
 	_lesson.size.x = minf(LESSON_MAX_WIDTH, available_width)
 
 	# Подбираем шрифт для самого широкого положения карточки в текущем окне.
@@ -341,31 +400,135 @@ func _draw_editor_divider(drag_area: Control) -> void:
 	var center := (drag_area.size * 0.5).floor()
 	drag_area.draw_rect(Rect2(center.x, 0, 1, drag_area.size.y), DIVIDER_LINE_COLOR)
 	var handle_position := center - DIVIDER_HANDLE_SIZE * 0.5
-	var hovered := get_viewport().gui_get_hovered_control() == drag_area
+	var hovered := get_viewport().gui_get_hovered_control() == drag_area or drag_area.has_focus()
 	var handle_color := DIVIDER_HANDLE_HOVER_COLOR if hovered else DIVIDER_HANDLE_COLOR
 	drag_area.draw_rect(Rect2(handle_position, DIVIDER_HANDLE_SIZE), handle_color)
 
 
-func _restore_editor_width() -> void:
-	var config := ConfigFile.new()
-	if config.load(EDITOR_LAYOUT_PATH) != OK:
-		return
-	var width: Variant = config.get_value(EDITOR_LAYOUT_SECTION, EDITOR_WIDTH_KEY, 0)
-	if typeof(width) != TYPE_INT or width <= 0:
-		return
-	# Фактическая ширина уже учитывает минимумы, поэтому сначала ограничиваем смещение.
+func _restore_editor_preferences() -> void:
+	_editor_config.load(EDITOR_LAYOUT_PATH)
+	var on_left: Variant = _editor_config.get_value(
+			EDITOR_LAYOUT_SECTION, EDITOR_ON_LEFT_KEY, false
+	)
+	if on_left is bool:
+		_apply_editor_side(on_left)
+	var text_size: Variant = _editor_config.get_value(
+			EDITOR_LAYOUT_SECTION, EDITOR_TEXT_SIZE_KEY, SettingsPanel.DEFAULT_TEXT_SIZE
+	)
+	if text_size is int:
+		_editor_text_size = clampi(text_size, SettingsPanel.MIN_TEXT_SIZE, SettingsPanel.MAX_TEXT_SIZE)
+	_editor.set_text_size(_editor_text_size)
+	_settings.set_values(_editor_on_left, _editor_text_size)
+	var width: Variant = _editor_config.get_value(EDITOR_LAYOUT_SECTION, EDITOR_WIDTH_KEY, 0)
+	if width is int and width > 0:
+		_set_editor_width.call_deferred(width)
+
+
+func _set_editor_width(width: int) -> void:
 	_layout.clamp_split_offset()
-	var offset: int = _layout.split_offsets[0] + roundi(_editor.size.x) - width
+	var direction := 1 if _editor_on_left else -1
+	var offset: int = _layout.split_offsets[0] + direction * (width - roundi(_editor.size.x))
 	_layout.split_offsets = PackedInt32Array([offset])
 	_layout.clamp_split_offset()
 
 
 func _save_editor_width() -> void:
-	var config := ConfigFile.new()
-	config.set_value(EDITOR_LAYOUT_SECTION, EDITOR_WIDTH_KEY, roundi(_editor.size.x))
-	var error := config.save(EDITOR_LAYOUT_PATH)
+	_save_editor_preference(EDITOR_WIDTH_KEY, roundi(_editor.size.x))
+
+
+func _save_editor_preference(key: String, value: Variant) -> void:
+	_editor_config.set_value(EDITOR_LAYOUT_SECTION, key, value)
+	var error := _editor_config.save(EDITOR_LAYOUT_PATH)
 	if error != OK:
-		push_warning("Не удалось сохранить ширину редактора: %s" % error_string(error))
+		push_warning("Не удалось сохранить настройки редактора: %s" % error_string(error))
+
+
+func _apply_editor_side(on_left: bool) -> void:
+	if on_left == _editor_on_left:
+		return
+	_editor_on_left = on_left
+	var offset: int = _layout.split_offsets[0]
+	_layout.move_child(_editor, 0 if on_left else 1)
+	_layout.split_offsets = PackedInt32Array([-offset])
+	_layout.queue_sort()
+
+
+func _on_editor_side_changed(on_left: bool) -> void:
+	if on_left == _editor_on_left:
+		return
+	_apply_editor_side(on_left)
+	_settings.set_values(_editor_on_left, _editor_text_size)
+	_save_editor_preference(EDITOR_ON_LEFT_KEY, on_left)
+
+
+func _toggle_settings() -> void:
+	if _settings.visible:
+		_settings.close()
+	else:
+		_focus_before_settings = get_viewport().gui_get_focus_owner()
+		_field_drag_button = MOUSE_BUTTON_NONE
+		_settings.open()
+
+
+func _restore_settings_focus() -> void:
+	if is_instance_valid(_focus_before_settings) and _focus_before_settings.is_visible_in_tree():
+		_focus_before_settings.grab_focus()
+	else:
+		_editor.get_keyboard_focus_targets()[0].grab_focus()
+	_focus_before_settings = null
+
+
+func _set_editor_text_size(value: int) -> void:
+	var size_px := clampi(value, SettingsPanel.MIN_TEXT_SIZE, SettingsPanel.MAX_TEXT_SIZE)
+	_settings.set_values(_editor_on_left, size_px)
+	if size_px == _editor_text_size:
+		return
+	_editor_text_size = size_px
+	_editor.set_text_size(size_px)
+	_save_editor_preference(EDITOR_TEXT_SIZE_KEY, size_px)
+
+
+func _step_editor_text_size(direction: int) -> void:
+	_set_editor_text_size(_editor_text_size + direction * TEXT_SIZE_STEP)
+
+
+func _handle_text_size_shortcut(key: InputEventKey) -> bool:
+	match key.keycode:
+		KEY_EQUAL, KEY_PLUS, KEY_KP_ADD:
+			_step_editor_text_size(1)
+		KEY_MINUS, KEY_KP_SUBTRACT:
+			if key.shift_pressed:
+				return false
+			_step_editor_text_size(-1)
+		KEY_0, KEY_KP_0:
+			if key.shift_pressed:
+				return false
+			_set_editor_text_size(SettingsPanel.DEFAULT_TEXT_SIZE)
+		_:
+			return false
+	return true
+
+
+func _cycle_editor_focus() -> void:
+	var targets: Array[Control] = [_editor_divider]
+	targets.append_array(_editor.get_keyboard_focus_targets())
+	var current := targets.find(get_viewport().gui_get_focus_owner())
+	targets[(current + 1) % targets.size()].grab_focus()
+
+
+func _on_editor_divider_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.ctrl_pressed or key.alt_pressed:
+		return
+	if key.shift_pressed or key.meta_pressed:
+		return
+	if key.keycode != KEY_LEFT and key.keycode != KEY_RIGHT:
+		return
+	var delta := KEYBOARD_RESIZE_STEP if key.keycode == KEY_RIGHT else -KEYBOARD_RESIZE_STEP
+	var width := roundi(_editor.size.x) + (delta if _editor_on_left else -delta)
+	_editor_divider.accept_event()
+	_set_editor_width(width)
+	_save_editor_width.call_deferred()
 
 
 func _on_run_requested(source: String) -> void:

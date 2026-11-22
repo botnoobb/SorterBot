@@ -7,6 +7,9 @@ signal step_requested(source: String)
 signal cargo_reset_requested()
 
 const EXECUTION_COLOR := Color(1.0, 0.85, 0.25, 0.22)
+const DIVIDER_FOCUS_COLOR := Color("#82b4e8")
+const DIVIDER_FOCUS_SIZE := Vector2(48.0, 3.0)
+const PAUSE_TOOLTIP := "Пауза после текущей инструкции (F5)"
 const OUTPUT_COLLAPSE_DISTANCE := 48.0
 const OUTPUT_EXPAND_DRAG_DISTANCE := 12.0
 const ProgramSyntaxHighlighter = preload("res://scripts/ui/program_syntax_highlighter.gd")
@@ -20,6 +23,7 @@ var _expanded_output_offset: int = 0
 var _output_drag_start_y: float = -INF
 
 @onready var _editor_split: VSplitContainer = $Margin/Content/EditorSplit
+@onready var _output_divider: Control = _editor_split.get_drag_area_controls()[0]
 @onready var _code: CodeEdit = $Margin/Content/EditorSplit/Code
 @onready var _run_button: Button = $Margin/Content/Header/Run
 @onready var _step_button: Button = $Margin/Content/Header/Step
@@ -33,21 +37,68 @@ func _ready() -> void:
 	_code.syntax_highlighter = ProgramSyntaxHighlighter.new()
 	_output.error_location_clicked.connect(_on_error_location_clicked)
 	_output.collapse_changed.connect(_on_output_collapse_changed)
-	var drag_area := _editor_split.get_drag_area_controls()[0]
-	drag_area.gui_input.connect(_on_output_drag_input.bind(drag_area))
+	_output_divider.focus_mode = Control.FOCUS_ALL
+	_output_divider.tooltip_text = "Высота вывода: стрелки ↑ и ↓ при фокусе (F7)"
+	_output_divider.gui_input.connect(_on_output_drag_input)
+	_output_divider.draw.connect(_draw_output_divider_focus)
+	_output_divider.focus_entered.connect(_output_divider.queue_redraw)
+	_output_divider.focus_exited.connect(_output_divider.queue_redraw)
 	_run_button.pressed.connect(_on_run_pressed)
 	_stop_button.pressed.connect(_on_stop_pressed)
 	_code.text_changed.connect(_on_text_changed)
 	_step_button.pressed.connect(_on_step_pressed)
 	_reset_cargo_button.pressed.connect(func() -> void: cargo_reset_requested.emit())
 	_step_button.disabled = false
-	_step_button.tooltip_text = "Выполнить одну инструкцию"
+
+
+func set_text_size(value: int) -> void:
+	var vertical_scroll := _code.scroll_vertical
+	var horizontal_scroll := _code.scroll_horizontal
+	_code.add_theme_font_size_override("font_size", value)
+	_code.scroll_vertical = vertical_scroll
+	_code.scroll_horizontal = horizontal_scroll
+	_output.set_text_size(value)
+
+
+func handle_program_shortcut(event: InputEventKey) -> bool:
+	if (
+			not event.pressed or event.echo or event.alt_pressed or event.ctrl_pressed
+			or event.meta_pressed or (event.shift_pressed and event.keycode != KEY_F5)
+	):
+		return false
+
+	var button: Button
+	match event.keycode:
+		KEY_F5:
+			button = _stop_button if event.shift_pressed else _run_button
+		KEY_F10:
+			button = _step_button
+		KEY_F8:
+			if _output.is_visible_in_tree():
+				var messages_had_focus := _output.get_messages_focus_target().has_focus()
+				_output.set_collapsed(not _output_collapsed)
+				if messages_had_focus:
+					_output_divider.grab_focus()
+			return true
+		_:
+			return false
+	if button.is_visible_in_tree() and not button.disabled:
+		button.pressed.emit()
+	return true
+
+
+func get_keyboard_focus_targets() -> Array[Control]:
+	var targets: Array[Control] = []
+	for control: Control in [_code, _output_divider, _output.get_messages_focus_target()]:
+		if control.is_visible_in_tree():
+			targets.append(control)
+	return targets
 
 
 func set_running(running: bool) -> void:
 	_run_button.disabled = false
 	_run_button.text = "Ⅱ" if running else "▶"
-	_run_button.tooltip_text = "Пауза после текущей инструкции" if running else "Запустить"
+	_run_button.tooltip_text = PAUSE_TOOLTIP if running else "Запустить (F5)"
 	_step_button.disabled = running
 	_running = running
 	_stop_button.disabled = not running
@@ -56,7 +107,7 @@ func set_running(running: bool) -> void:
 func set_paused(paused: bool) -> void:
 	_step_button.disabled = not paused
 	_run_button.text = "▶" if paused else "Ⅱ"
-	_run_button.tooltip_text = "Продолжить" if paused else "Пауза после текущей инструкции"
+	_run_button.tooltip_text = "Продолжить (F5)" if paused else PAUSE_TOOLTIP
 	show_message("Программа на паузе" if paused else "Программа выполняется…")
 
 
@@ -140,16 +191,21 @@ func _on_output_collapse_changed(collapsed: bool) -> void:
 		_editor_split.split_offsets = PackedInt32Array([_expanded_output_offset])
 
 
-func _on_output_drag_input(event: InputEvent, drag_area: Control) -> void:
-	if _output_collapsed and (event.is_action_pressed("ui_up", true)
-			or event.is_action_pressed("ui_down", true)):
-		drag_area.accept_event()
+func _on_output_drag_input(event: InputEvent) -> void:
+	if _output_collapsed and _output_divider.has_focus():
+		if event.is_action_pressed("ui_up", true):
+			_output.set_collapsed(false)
+			_output_divider.accept_event()
+			return
+		if event.is_action_pressed("ui_down", true):
+			_output_divider.accept_event()
+			return
 	var button := event as InputEventMouseButton
 	if button == null or button.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if _output_collapsed:
-		drag_area.accept_event()
-	var position := drag_area.get_transform() * button.position
+		_output_divider.accept_event()
+	var position := _output_divider.get_transform() * button.position
 	if button.pressed:
 		_output_drag_start_y = position.y
 		_output_drag_start_offset = _editor_split.split_offsets[0]
@@ -164,6 +220,14 @@ func _on_output_drag_input(event: InputEvent, drag_area: Control) -> void:
 	elif _editor_split.size.y - position.y <= OUTPUT_COLLAPSE_DISTANCE:
 		# Разделитель сначала должен обработать отпускание кнопки.
 		_collapse_output_after_drag.call_deferred(_output_drag_start_offset)
+
+
+func _draw_output_divider_focus() -> void:
+	if _output_divider.has_focus():
+		var width := minf(DIVIDER_FOCUS_SIZE.x, _output_divider.size.x)
+		var size := Vector2(width, DIVIDER_FOCUS_SIZE.y)
+		var position := (_output_divider.size - size) * 0.5
+		_output_divider.draw_rect(Rect2(position, size), DIVIDER_FOCUS_COLOR)
 
 
 func _collapse_output_after_drag(previous_offset: int) -> void:

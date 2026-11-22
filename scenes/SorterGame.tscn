@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_game.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ProgramEditor.tscn" id="2"]
@@ -9,6 +9,8 @@
 [ext_resource type="PackedScene" path="res://assets/models/field/conveyor.glb" id="6"]
 [ext_resource type="PackedScene" path="res://assets/models/field/tray_orange.glb" id="7"]
 [ext_resource type="Script" path="res://scripts/gameplay/sorter_conveyor.gd" id="8"]
+[ext_resource type="PackedScene" path="res://scenes/SettingsPanel.tscn" id="9"]
+[ext_resource type="Texture2D" path="res://assets/settings_gear.svg" id="10"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1
@@ -352,3 +354,18 @@ layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 0
 theme_override_font_sizes/normal_font_size = 16
+
+[node name="SettingsButton" type="Button" parent="."]
+custom_minimum_size = Vector2(40, 40)
+offset_left = 264.0
+offset_top = 16.0
+offset_right = 304.0
+offset_bottom = 56.0
+theme = ExtResource("5")
+theme_type_variation = &"ReferenceButton"
+accessibility_name = "Настройки"
+tooltip_text = "Настройки (Esc)"
+icon = ExtResource("10")
+icon_alignment = 1
+
+[node name="SettingsPanel" parent="." instance=ExtResource("9")]

@@ -55,6 +55,14 @@ func set_collapsed(collapsed: bool) -> void:
 	_title.button_pressed = collapsed
 
 
+func set_text_size(value: int) -> void:
+	_messages.add_theme_font_size_override("normal_font_size", value)
+
+
+func get_messages_focus_target() -> Control:
+	return _messages
+
+
 func _reveal() -> void:
 	set_collapsed(false)
 	show()
@@ -63,7 +71,7 @@ func _reveal() -> void:
 func _apply_collapsed(collapsed: bool) -> void:
 	_messages.visible = not collapsed
 	custom_minimum_size.y = 0 if collapsed else EXPANDED_MINIMUM_HEIGHT
-	_title.tooltip_text = "Раскрыть вывод" if collapsed else "Свернуть вывод"
+	_title.tooltip_text = "Раскрыть вывод (F8)" if collapsed else "Свернуть вывод (F8)"
 
 
 func _on_title_toggled(collapsed: bool) -> void:

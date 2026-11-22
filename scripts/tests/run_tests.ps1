@@ -1,6 +1,10 @@
 #Requires -Version 7.0
 
-param([string]$GodotPath)
+param(
+	[string]$GodotPath,
+	[ValidatePattern('^[a-z][a-z-]*$')]
+	[string]$Suite
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -36,14 +40,27 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Pat
 $tempRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetTempPath())).Path.TrimEnd('\', '/')
 $testProject = Join-Path $tempRoot ('sorter-bot-tests-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testProject | Out-Null
+$previousAppData = $env:APPDATA
+$previousXdgDataHome = $env:XDG_DATA_HOME
+$previousTestProfile = $env:SORTER_TEST_PROFILE
 
 try {
+	$testProfile = Join-Path $testProject 'profile'
+	New-Item -ItemType Directory -Path $testProfile | Out-Null
+	$env:APPDATA = $testProfile
+	$env:XDG_DATA_HOME = $testProfile
+	$env:SORTER_TEST_PROFILE = $testProfile
+
 	$projectFiles = 'project.godot', 'assets', 'scenes', 'scripts' |
 		ForEach-Object { Join-Path $projectRoot $_ }
 	Copy-Item -LiteralPath $projectFiles -Destination $testProject -Recurse
 
 	$null = Invoke-GodotCheck -Stage 'Импорт' -Arguments '--editor --import'
-	$testLog = @(Invoke-GodotCheck -Stage 'Тесты' -Arguments '--script res://scripts/tests/run_tests.gd')
+	$testArguments = '--script res://scripts/tests/run_tests.gd'
+	if ($Suite) {
+		$testArguments += " -- --$Suite"
+	}
+	$testLog = @(Invoke-GodotCheck -Stage 'Тесты' -Arguments $testArguments)
 	$summary = $testLog -match '^Проверки: \d+; ошибки: 0$'
 	if (-not $summary) {
 		$testLog | Write-Host
@@ -51,6 +68,9 @@ try {
 	}
 	$summary
 } finally {
+	$env:APPDATA = $previousAppData
+	$env:XDG_DATA_HOME = $previousXdgDataHome
+	$env:SORTER_TEST_PROFILE = $previousTestProfile
 	$resolvedTestProject = (Resolve-Path -LiteralPath $testProject).Path
 	if ((Split-Path -Parent $resolvedTestProject) -eq $tempRoot -and $resolvedTestProject -eq $testProject) {
 		Remove-Item -LiteralPath $resolvedTestProject -Recurse

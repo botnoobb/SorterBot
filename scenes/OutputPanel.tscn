@@ -19,5 +19,7 @@ alignment = 0
 [node name="Messages" type="RichTextLabel" parent="."]
 layout_mode = 2
 size_flags_vertical = 3
+focus_mode = 2
+tooltip_text = "Копировать выделенный текст: Ctrl+C"
 selection_enabled = true
 scroll_following = true

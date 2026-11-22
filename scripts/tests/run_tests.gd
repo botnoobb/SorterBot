@@ -36,17 +36,20 @@ func _run() -> void:
 	var evolve_program_requested := arguments.has("--evolve-program")
 	var reference_requested := arguments.has("--learning-reference")
 	var output_panel_requested := arguments.has("--output-panel")
+	var editor_settings_requested := arguments.has("--editor-settings")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
 			or order_progress_requested or cargo_generation_requested or evolve_program_requested
-			or reference_requested or output_panel_requested
+			or reference_requested or output_panel_requested or editor_settings_requested
 	):
 		if cargo_generation_requested:
 			_test_cargo_generation()
 		elif output_panel_requested:
 			await _test_output_panel()
+		elif editor_settings_requested:
+			await _test_editor_settings()
 		elif reference_requested:
 			await _test_reference_panel()
 			await _test_while()
@@ -74,6 +77,10 @@ func _run() -> void:
 		print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 		quit(1 if _failures > 0 else 0)
 		return
+	if not arguments.is_empty():
+		push_error("Неизвестный набор тестов: %s" % ", ".join(arguments))
+		quit(1)
+		return
 	_test_cargo_generation()
 	await _test_variables()
 	await _test_while()
@@ -97,6 +104,7 @@ func _run() -> void:
 	await _test_input_tray()
 	await _test_wrong_delivery()
 	await _test_reset_cargo()
+	await _test_editor_settings()
 	print("Проверки: %d; ошибки: %d" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -370,9 +378,14 @@ func _test_camera_zoom() -> void:
 	await process_frame
 	var field_view: SubViewportContainer = game.get_node("Layout/Field")
 	var camera: Camera3D = field_view.get_node("Viewport/World/Camera")
+	_expect(_is_field_in_view(camera), "При открытии сцены всё поле помещается в кадр")
+	# Задаём ширину панели после первичной разметки в чистом тестовом профиле.
+	var layout: HSplitContainer = game.get_node("Layout")
+	layout.split_offsets = PackedInt32Array([24])
+	await process_frame
+	await process_frame
 	var field_position := field_view.global_position + field_view.size * Vector2(0.9, 0.65)
 	var initial_size := camera.size
-	_expect(_is_field_in_view(camera), "При открытии сцены всё поле помещается в кадр")
 	var field_center := Vector3(2, 0, 2)
 	var initial_screen_center := camera.unproject_position(field_center)
 	_scroll_at(field_position, MOUSE_BUTTON_WHEEL_UP)
@@ -1517,6 +1530,284 @@ func _click_button(button: Button) -> void:
 	var position := button.get_global_rect().get_center()
 	_push_mouse_button(position, MOUSE_BUTTON_LEFT, true)
 	_push_mouse_button(position, MOUSE_BUTTON_LEFT, false)
+
+
+func _test_editor_settings() -> void:
+	var profile := OS.get_environment("SORTER_TEST_PROFILE").replace("\\", "/").simplify_path()
+	var user_data := OS.get_user_data_dir().replace("\\", "/").simplify_path()
+	var isolated := not profile.is_empty() and user_data.begins_with(profile + "/")
+	_expect(isolated, "Проверки настроек запускаются в изолированном профиле из run_tests.ps1")
+	if not isolated:
+		return
+	var game := _instantiate_game_with_known_cargo()
+	root.add_child(game)
+	await process_frame
+	var settings := game.get_node_or_null("SettingsPanel") as Control
+	var gear := game.get_node_or_null("SettingsButton") as Button
+	var settings_available := settings != null and gear != null
+	_expect(settings_available, "Игровая сцена содержит окно и кнопку настроек")
+	if settings_available:
+		_expect(not settings.visible and gear.text.is_empty() and gear.icon != null,
+				"При запуске настройки закрыты, а кнопка входа показывает шестерёнку")
+		_click_button(gear)
+		await process_frame
+		_expect(settings.visible, "Кнопка с шестерёнкой открывает настройки")
+		_click_button(settings.get_node("%Close"))
+		_expect(not settings.visible, "Кнопка закрывает настройки")
+		await _test_editor_side_settings(game, settings)
+		await _test_editor_text_settings(game, settings)
+		await _test_editor_keyboard(game)
+		_push_settings_key(KEY_EQUAL, true)
+	game.queue_free()
+	await process_frame
+	if settings_available:
+		await _test_reopened_editor_settings()
+
+
+func _test_editor_side_settings(game: Control, settings: Control) -> void:
+	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+	var field: Control = game.get_node("Layout/Field")
+	var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
+	var messages: RichTextLabel = editor.get_node("Margin/Content/EditorSplit/OutputPanel/Messages")
+	var lesson: Control = game.get_node("Lesson")
+	var reference: Control = game.get_node("ReferencePanel")
+	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	var reference_button: Button = game.get_node("ReferenceToggle")
+	var gear: Button = game.get_node("SettingsButton")
+	var source := "print('Строка')\n".repeat(80)
+	code.text = source
+	code.set_caret_line(40)
+	code.set_caret_column(5)
+	editor.append_output("Посылка")
+	await _open_reference_section(game, "Output")
+	code.grab_focus()
+	await process_frame
+	code.scroll_vertical = 35
+	var scroll_position := code.scroll_vertical
+	var article_before := article.text
+	var width_before := editor.size.x
+	var field_before := field.global_position.x
+	_expect(field_before < editor.global_position.x, "По умолчанию редактор расположен справа")
+	_push_settings_key(KEY_ESCAPE)
+	await process_frame
+	_expect(settings.visible and (settings.get_node("%Right") as Button).button_pressed,
+			"Esc открывает настройки с выбранной текущей стороной")
+
+	var camera: Camera3D = field.get_node("Viewport/World/Camera")
+	var camera_size := camera.size
+	var field_rect := field.get_global_rect()
+	var wheel_position := Vector2(field_rect.end.x - 24.0, field_rect.get_center().y)
+	_push_mouse_button(wheel_position, MOUSE_BUTTON_WHEEL_UP, true)
+	_push_mouse_button(wheel_position, MOUSE_BUTTON_WHEEL_UP, false)
+	_expect(is_equal_approx(camera.size, camera_size), "Открытые настройки блокируют ввод на поле")
+	_click_button(settings.get_node("%Left"))
+	await process_frame
+	await process_frame
+	_expect(editor.global_position.x < field.global_position.x
+			and field.global_position.x > field_before,
+			"Выбор левой стороны перемещает редактор и поле")
+	_expect(absf(editor.size.x - width_before) <= 1.0, "Смена стороны сохраняет ширину редактора")
+	_expect(field.get_global_rect().encloses(lesson.get_global_rect())
+			and field.get_global_rect().encloses(reference_button.get_global_rect())
+			and field.get_global_rect().encloses(reference.get_global_rect())
+			and field.get_global_rect().encloses(gear.get_global_rect()),
+			"Задание, справка и шестерёнка располагаются над перемещённым полем")
+	_expect(reference.visible and article.visible and article.text == article_before,
+			"Смена стороны сохраняет открытую статью справки")
+	_expect(messages.is_visible_in_tree() and messages.get_parsed_text() == "Посылка\n"
+			and messages.global_position.y >= code.get_global_rect().end.y,
+			"Сообщения сохранились под редактором после смены стороны")
+
+	_push_settings_key(KEY_ESCAPE)
+	await process_frame
+	_expect(not settings.visible and code.has_focus(), "Esc закрывает настройки и возвращает фокус")
+	_expect(
+			code.text == source and code.get_caret_line() == 40 and code.get_caret_column() == 5
+			and code.scroll_vertical == scroll_position,
+			"Смена стороны и закрытие окна сохраняют текст, курсор и прокрутку"
+	)
+
+
+func _test_editor_text_settings(game: Control, settings: Control) -> void:
+	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+	var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
+	var messages: RichTextLabel = editor.get_node("Margin/Content/EditorSplit/OutputPanel/Messages")
+	var slider: HSlider = settings.get_node("%SizeSlider")
+	var entry: LineEdit = settings.get_node("%SizeEntry")
+	var source := code.text
+	var scroll_position := code.scroll_vertical
+	_push_settings_key(KEY_ESCAPE)
+	await process_frame
+	_expect(slider.min_value == 12.0 and slider.max_value == 28.0 and slider.step == 1.0
+			and slider.value == 18.0 and entry.text == "18", "Доступен размер текста от 12 до 28 px")
+	_click_button(settings.get_node("%Increase"))
+	_expect(_editor_text_uses_size(code, messages, 20) and slider.value == 20 and entry.text == "20",
+			"Плюс меняет размер текста и синхронизирует значения")
+	_click_button(settings.get_node("%Decrease"))
+	_expect(_editor_text_uses_size(code, messages, 18) and slider.value == 18 and entry.text == "18",
+			"Минус меняет размер текста и синхронизирует значения")
+	var slider_rect := slider.get_global_rect()
+	var slider_position := Vector2(slider_rect.position.x + 0.8 * slider_rect.size.x,
+			slider_rect.get_center().y)
+	_push_mouse_button(slider_position, MOUSE_BUTTON_LEFT, true)
+	_push_mouse_button(slider_position, MOUSE_BUTTON_LEFT, false)
+	var selected := roundi(slider.value)
+	_expect(selected > 18 and _editor_text_uses_size(code, messages, selected)
+			and entry.text == str(selected), "Ползунок сразу меняет размер кода и вывода")
+	entry.grab_focus()
+	_push_settings_key(KEY_A, true)
+	_push_settings_key(KEY_2)
+	_push_settings_key(KEY_1)
+	_push_settings_key(KEY_ENTER)
+	_expect(_editor_text_uses_size(code, messages, 21) and slider.value == 21 and entry.text == "21",
+			"Ручной ввод сохраняет нечётный размер и синхронизирует ползунок")
+	_click_button(settings.get_node("%Reset"))
+	_expect(_editor_text_uses_size(code, messages, 18) and slider.value == 18 and entry.text == "18",
+			"Кнопка сброса возвращает 18 px")
+	_push_settings_key(KEY_EQUAL, true)
+	_expect(_editor_text_uses_size(code, messages, 20) and slider.value == 20 and entry.text == "20",
+			"Клавиша размера работает при открытых настройках")
+	var shortcut_list: GridContainer = settings.get_node("%ShortcutList")
+	var labels := PackedStringArray()
+	for row: Label in shortcut_list.get_children():
+		labels.append(row.text)
+	_expect("F5" in labels and "F8" in labels and "Esc" in labels and "Ctrl+C" in labels,
+			"Фиксированные сочетания перечислены в настройках")
+	_push_settings_key(KEY_ESCAPE)
+	await process_frame
+	_expect(code.text == source and code.get_caret_line() == 40 and code.get_caret_column() == 5
+			and code.scroll_vertical == scroll_position and messages.get_parsed_text() == "Посылка\n",
+			"Настройка размера сохраняет программу, позицию редактирования и сообщения")
+	_push_settings_key(KEY_MINUS, true)
+	_expect(_editor_text_uses_size(code, messages, 18), "Ctrl+минус уменьшает размер")
+	_push_settings_key(KEY_EQUAL, true)
+	_push_settings_key(KEY_0, true)
+	_expect(_editor_text_uses_size(code, messages, 18), "Ctrl+0 сбрасывает размер")
+
+
+func _editor_text_uses_size(code: CodeEdit, messages: RichTextLabel, size_px: int) -> bool:
+	return (
+			code.get_theme_font_size("font_size") == size_px
+			and messages.get_theme_font_size("normal_font_size") == size_px
+	)
+
+
+func _test_editor_keyboard(game: Control) -> void:
+	var layout: HSplitContainer = game.get_node("Layout")
+	var editor: ProgramEditor = layout.get_node("ProgramEditor")
+	var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
+	var output: OutputPanel = editor.get_node("Margin/Content/EditorSplit/OutputPanel")
+	var messages: RichTextLabel = output.get_node("Messages")
+	var step: Button = editor.get_node("Margin/Content/Header/Step")
+	var stop: Button = editor.get_node("Margin/Content/Header/Stop")
+	var width_divider := layout.get_drag_area_controls()[0]
+	var height_divider := (code.get_parent() as VSplitContainer).get_drag_area_controls()[0]
+	code.grab_focus()
+	var width_before := editor.size.x
+	var column_before := code.get_caret_column()
+	_push_settings_key(KEY_RIGHT)
+	_expect(code.get_caret_column() == column_before + 1 and editor.size.x == width_before,
+			"Стрелка в редакторе перемещает курсор и сохраняет ширину")
+	_expect(_focus_editor_control(height_divider), "F7 переводит фокус на вертикальный разделитель")
+	var height_before := output.size.y
+	_push_settings_key(KEY_UP)
+	await process_frame
+	await process_frame
+	_expect(output.size.y > height_before, "Стрелка на разделителе меняет высоту вывода")
+	_expect(_focus_editor_control(width_divider), "F7 переводит фокус на горизонтальный разделитель")
+	_push_settings_key(KEY_RIGHT)
+	await process_frame
+	await process_frame
+	_expect(editor.size.x > width_before, "Стрелка на разделителе меняет ширину редактора")
+	_push_settings_key(KEY_F8)
+	_expect(not messages.is_visible_in_tree(), "F8 сворачивает вывод")
+	_push_settings_key(KEY_F8)
+	_expect(messages.is_visible_in_tree() and messages.get_parsed_text() == "Посылка\n",
+			"F8 раскрывает вывод с прежними сообщениями")
+	_expect(_focus_editor_control(messages), "F7 переводит фокус на текст вывода")
+	_push_settings_key(KEY_A, true)
+	var copy_handled := _push_settings_key(KEY_C, true)
+	_expect(copy_handled and messages.get_selected_text().strip_edges() == "Посылка",
+			"Штатные команды выделения и копирования доступны в выводе")
+
+	code.text = "print('Первая')\nprint('Вторая')\nprint('Третья')"
+	code.grab_focus()
+	_push_settings_key(KEY_F10)
+	await _wait_shortcut_button(step, false)
+	_expect(not stop.disabled and messages.get_parsed_text() == "Первая\n",
+			"F10 выполняет одну инструкцию и оставляет программу на паузе")
+	_push_settings_key(KEY_F5)
+	_expect(step.disabled, "F5 продолжает выполнение, а шаг во время выполнения недоступен")
+	_push_settings_key(KEY_F10)
+	_push_settings_key(KEY_F5)
+	await _wait_shortcut_button(step, false)
+	_expect(not stop.disabled and messages.get_parsed_text() == "Первая\nВторая\n",
+			"F5 запрашивает паузу после текущей инструкции")
+	_push_settings_key(KEY_F5)
+	await _wait_shortcut_button(stop, true)
+	_expect(messages.get_parsed_text() == "Первая\nВторая\nТретья\n",
+			"Повторное продолжение выполняет оставшуюся инструкцию")
+	_push_settings_key(KEY_F5)
+	_push_settings_key(KEY_F5, false, true)
+	await _wait_shortcut_button(stop, true)
+	_expect(stop.disabled and messages.get_parsed_text() == "Первая\n",
+			"Shift+F5 останавливает программу после текущей инструкции")
+
+	code.text = "print('Начало')\nprint('Конец')"
+	_push_settings_key(KEY_F5)
+	_push_settings_key(KEY_ESCAPE)
+	await _wait_shortcut_button(stop, true)
+	_expect((game.get_node("SettingsPanel") as Control).visible
+			and messages.get_parsed_text() == "Начало\nКонец\n",
+			"Программа выполняется, пока открыты настройки")
+	_push_settings_key(KEY_ESCAPE)
+
+
+func _test_reopened_editor_settings() -> void:
+	var game := _instantiate_game_with_known_cargo()
+	root.add_child(game)
+	await process_frame
+	await process_frame
+	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+	var field: Control = game.get_node("Layout/Field")
+	var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
+	var messages: RichTextLabel = editor.get_node("Margin/Content/EditorSplit/OutputPanel/Messages")
+	_expect(editor.global_position.x < field.global_position.x
+			and _editor_text_uses_size(code, messages, 20),
+			"После повторного открытия восстанавливаются сторона и размер текста")
+	game.queue_free()
+	await process_frame
+
+
+func _focus_editor_control(control: Control) -> bool:
+	for attempt: int in range(4):
+		if control.has_focus():
+			break
+		_push_settings_key(KEY_F7)
+	return control.has_focus()
+
+
+func _wait_shortcut_button(button: Button, disabled: bool) -> void:
+	var deadline := create_timer(3.0)
+	while button.disabled != disabled and deadline.time_left > 0.0:
+		await process_frame
+
+
+func _push_settings_key(keycode: Key, ctrl: bool = false, shift: bool = false) -> bool:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.physical_keycode = keycode
+	event.ctrl_pressed = ctrl
+	event.shift_pressed = shift
+	event.pressed = true
+	if keycode >= KEY_SPACE and keycode <= 126:
+		event.unicode = keycode
+	root.push_input(event, true)
+	var handled := root.is_input_handled()
+	var released := event.duplicate() as InputEventKey
+	released.pressed = false
+	root.push_input(released, true)
+	return handled
 
 
 func _test_output_panel() -> void:
