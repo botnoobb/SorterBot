@@ -69,6 +69,10 @@ func get_box_color() -> String:
 	return _box_color_name
 
 
+func get_delivery_color(cell: Vector2i) -> String:
+	return _zones_by_color.find_key(cell)
+
+
 func swap_delivery_zones() -> void:
 	var orange_cell := _zones_by_color["orange"]
 	_zones_by_color["orange"] = _zones_by_color["blue"]

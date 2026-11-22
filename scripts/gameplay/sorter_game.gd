@@ -7,7 +7,8 @@ const DIVIDER_LINE_COLOR := Color("#243953")
 const DIVIDER_HANDLE_COLOR := Color("#537da9")
 const DIVIDER_HANDLE_HOVER_COLOR := Color("#82b4e8")
 const DIVIDER_HANDLE_SIZE := Vector2(2, 20)
-const REFERENCE_ANIMATION_DURATION := 0.22
+const REFERENCE_MAX_WIDTH := 320.0
+const REFERENCE_HEIGHT_RATIO := 0.4
 const LESSON_REFERENCE_GAP := 16.0
 const LESSON_MAX_WIDTH := 380.0
 const FIRST_ORDER_COLOR := "orange"
@@ -37,34 +38,41 @@ const CARGO_REFERENCE := (
 		+ 'Пример со старта:\nmove("up")\nmove("up")\nmove("up")\nmove("left")\ngrab()\n'
 		+ 'move("right")\nmove("right")\nmove("right")\nmove("right")\n'
 		+ 'move("down")\nmove("down")\nput()\n\n'
-		+ 'Для коробки blue добавьте move("down") перед put().'
+		+ 'Пример доставляет коробку {upper}. Для коробки {lower} добавьте '
+		+ 'move("down") перед put().'
 )
 const OUTPUT_REFERENCE := (
-		"Вывод\n\nprint() выводит текст. Пишите текст в кавычках, а имя переменной без них.\n\n"
+		"Переменные и вывод\n\nprint() выводит текст. "
+		+ "Пишите текст в кавычках, а имя переменной без них.\n\n"
 		+ 'Пример:\nprint("Готово")\n\n'
 		+ 'Цвет коробки можно вывести напрямую:\nprint(get_box_color())\n\n'
 		+ "Переменные\n\nСохраните цвет коробки под именем color, чтобы использовать его позже. "
 		+ "saved = color копирует текущее значение. Новое присваивание меняет color, "
 		+ "а saved хранит прежнюю строку. Цвет самой коробки при этом не меняется.\n\n"
-		+ 'color = get_box_color()\nsaved = color\ncolor = "blue"\nprint(saved)\nprint(color)'
+		+ 'color = get_box_color()\nsaved = color\ncolor = "blue"\nprint(saved)\nprint(color)\n\n'
+		+ "Как читать ошибки\n\n"
+		+ "Если в выводе указан номер строки, нажмите на него, чтобы перейти к коду. "
+		+ "При доставке в чужую зону игра подскажет нужную. Сверьте маршрут с подсказкой "
+		+ "и запустите исправленную программу."
 )
 const CONDITIONS_REFERENCE := (
 		"Условия\n\nДоставьте коробку в зону её цвета. "
-		+ 'if сравнивает color с "orange". Если значения совпадают, выполнится первый блок. '
+		+ 'if сравнивает color с "{upper}". Если значения совпадают, выполнится первый блок. '
 		+ "Иначе робот выполнит команды под else. Команды внутри ветвей пишутся с отступом.\n\n"
 		+ 'color = get_box_color()\nmove("up")\nmove("up")\nmove("up")\nmove("left")\ngrab()\n'
 		+ 'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
-		+ 'if color == "orange":\n    put()\nelse:\n    move("down")\n    put()\n\n'
+		+ 'if color == "{upper}":\n    put()\nelse:\n    move("down")\n    put()\n\n'
 		+ "Попробуйте обе коробки. В режиме «Шаг» строка if подсветится отдельно "
 		+ "перед первой командой выбранной ветви."
 )
 const WHILE_REFERENCE := (
-		"Цикл while\n\nДоставьте две коробки одним запуском. Цикл повторяет доставку "
-		+ "и возвращает робота на выдачу. После второй доставки нажмите «Стоп».\n\n"
+		"Цикл while\n\nЦикл повторяет доставку и возвращает робота на выдачу. "
+		+ "Запустите его со стартовой клетки. Когда заказ выполнен, нажмите «Стоп». "
+		+ "Перед новым запуском верните робота на старт кнопкой «Начать текущий груз заново».\n\n"
 		+ 'move("up")\nmove("up")\nmove("up")\nmove("left")\n'
 		+ 'while True:\n    color = get_box_color()\n    grab()\n'
 		+ '    move("right")\n    move("right")\n    move("right")\n    move("right")\n'
-		+ '    move("down")\n    move("down")\n    if color == "orange":\n'
+		+ '    move("down")\n    move("down")\n    if color == "{upper}":\n'
 		+ '        put()\n    else:\n        move("down")\n        put()\n'
 		+ '        move("up")\n    move("up")\n    move("up")\n'
 		+ '    move("left")\n    move("left")\n    move("left")\n    move("left")\n\n'
@@ -80,7 +88,7 @@ const FUNCTIONS_REFERENCE := (
 		+ "Каждый вызов deliver() выполняет тело заново.\n\n"
 		+ "def deliver():\n    color = get_box_color()\n    grab()\n"
 		+ '    move("right")\n    move("right")\n    move("right")\n    move("right")\n'
-		+ '    move("down")\n    move("down")\n    if color == "orange":\n'
+		+ '    move("down")\n    move("down")\n    if color == "{upper}":\n'
 		+ '        put()\n    else:\n        move("down")\n        put()\n'
 		+ '        move("up")\n    move("up")\n    move("up")\n'
 		+ '    move("left")\n    move("left")\n    move("left")\n    move("left")\n\n'
@@ -95,12 +103,13 @@ const FUNCTIONS_REFERENCE := (
 		+ 'direction = "left"\ntravel(direction)\n\n'
 		+ "Возвращаемое значение\n\nФункция выбирает назначение по цвету коробки. "
 		+ "return завершает функцию и передаёт результат в zone. Пустой return и "
-		+ "конец тела возвращают None. Перезапустите сцену перед примером.\n\n"
-		+ 'def choose_zone(color):\n    if color == "orange":\n        return "orange"\n'
-		+ '    return "blue"\nmove("up")\nmove("up")\nmove("up")\nmove("left")\n'
+		+ "конец тела возвращают None. Перед примером верните робота на старт кнопкой "
+		+ "«Начать текущий груз заново».\n\n"
+		+ 'def choose_zone(color):\n    if color == "{upper}":\n        return "{upper}"\n'
+		+ '    return "{lower}"\nmove("up")\nmove("up")\nmove("up")\nmove("left")\n'
 		+ 'color = get_box_color()\nzone = choose_zone(color)\ngrab()\n'
 		+ 'move("right")\nmove("right")\nmove("right")\nmove("right")\nmove("down")\nmove("down")\n'
-		+ 'if zone == "blue":\n    move("down")\nput()'
+		+ 'if zone == "{lower}":\n    move("down")\nput()'
 )
 
 var _parser := ProgramParser.new()
@@ -113,6 +122,7 @@ var _field_zoom: float = 1.0
 var _field_pan := Vector2.ZERO
 var _field_drag_button: MouseButton = MOUSE_BUTTON_NONE
 var _field_drag_position := Vector2.ZERO
+var _reference_template: String
 
 @onready var _editor: ProgramEditor = $Layout/ProgramEditor
 @onready var _field: SorterField = $Layout/Field/Viewport/World
@@ -129,8 +139,8 @@ var _field_drag_position := Vector2.ZERO
 @onready var _order_rules: Label = $Lesson/Content/OrderRules
 @onready var _accept_order: Button = $Lesson/Content/AcceptOrder
 @onready var _reference_panel: Panel = $ReferencePanel
-@onready var _reference_compact_top: float = _reference_panel.offset_top
-@onready var _reference_sections: VBoxContainer = $ReferencePanel/Content/Sections
+@onready var _reference_toggle: Button = $ReferenceToggle
+@onready var _reference_sections: ScrollContainer = $ReferencePanel/Content/Sections
 @onready var _reference_detail: VBoxContainer = $ReferencePanel/Content/Detail
 @onready var _reference_article: RichTextLabel = $ReferencePanel/Content/Detail/Article
 @onready var _robot: SorterRobot = $Layout/Field/Viewport/World/Robot
@@ -156,26 +166,21 @@ func _ready() -> void:
 	_layout.drag_ended.connect(_save_editor_width, CONNECT_DEFERRED)
 	_restore_editor_width.call_deferred()
 
-	$ReferencePanel/Content/Sections/Movement.pressed.connect(
-			_open_reference.bind(MOVEMENT_REFERENCE)
-	)
-	$ReferencePanel/Content/Sections/Cargo.pressed.connect(_open_reference.bind(CARGO_REFERENCE))
-	$ReferencePanel/Content/Sections/Output.pressed.connect(_open_reference.bind(OUTPUT_REFERENCE))
-	$ReferencePanel/Content/Sections/Conditions.pressed.connect(
-			_open_reference.bind(CONDITIONS_REFERENCE)
-	)
-	$ReferencePanel/Content/Sections/While.pressed.connect(_open_reference.bind(WHILE_REFERENCE))
-	$ReferencePanel/Content/Sections/Functions.pressed.connect(
-			_open_reference.bind(FUNCTIONS_REFERENCE)
-	)
-	$ReferencePanel/Content/Detail/Back.pressed.connect(_close_reference)
+	_reference_toggle.toggled.connect(_toggle_reference)
+	var sections: VBoxContainer = _reference_sections.get_node("List")
+	sections.get_node("Movement").pressed.connect(_open_reference.bind(MOVEMENT_REFERENCE))
+	sections.get_node("Cargo").pressed.connect(_open_reference.bind(CARGO_REFERENCE))
+	sections.get_node("Output").pressed.connect(_open_reference.bind(OUTPUT_REFERENCE))
+	sections.get_node("Conditions").pressed.connect(_open_reference.bind(CONDITIONS_REFERENCE))
+	sections.get_node("While").pressed.connect(_open_reference.bind(WHILE_REFERENCE))
+	sections.get_node("Functions").pressed.connect(_open_reference.bind(FUNCTIONS_REFERENCE))
+	$ReferencePanel/Content/Detail/Back.pressed.connect(_show_reference_sections)
 	_lesson_toggle.toggled.connect(_toggle_lesson)
 	_field_view.gui_input.connect(_on_field_gui_input)
-	_field_view.resized.connect(_resize_lesson, CONNECT_DEFERRED)
-	_editor.resized.connect(_resize_lesson, CONNECT_DEFERRED)
+	_field_view.resized.connect(_resize_overlays, CONNECT_DEFERRED)
+	_editor.resized.connect(_resize_overlays, CONNECT_DEFERRED)
 	_lesson.minimum_size_changed.connect(_fit_compact_lesson_height)
-	_lesson.resized.connect(_sync_reference_top)
-	_resize_lesson.call_deferred()
+	_resize_overlays.call_deferred()
 
 
 func _notification(what: int) -> void:
@@ -218,7 +223,13 @@ func _zoom_field(event: InputEventMouseButton) -> void:
 	_field_view.accept_event()
 
 
-func _resize_lesson() -> void:
+func _resize_overlays() -> void:
+	_reference_panel.offset_right = _reference_panel.offset_left + minf(
+			REFERENCE_MAX_WIDTH, _field_view.size.x - 2.0 * _reference_panel.offset_left
+	)
+	_reference_panel.offset_top = (
+			_reference_panel.offset_bottom - floorf(_field_view.size.y * REFERENCE_HEIGHT_RATIO)
+	)
 	var available_width := _field_view.size.x - 2.0 * _lesson.offset_left
 	_lesson.size.x = minf(LESSON_MAX_WIDTH, available_width)
 
@@ -260,8 +271,8 @@ func _frame_field() -> void:
 	elif _order_rules.visible:
 		compact_bottom = _order_rules
 	var top: float = compact_bottom.get_global_rect().end.y - field_rect.position.y + lesson_margin
-	var reference_top: float = field_rect.size.y + _reference_compact_top
-	var reference_right: float = _reference_panel.get_global_rect().end.x - field_rect.position.x
+	var reference_top: float = field_rect.size.y + _reference_toggle.offset_top
+	var reference_right: float = _reference_toggle.get_global_rect().end.x - field_rect.position.x
 	var above_reference := Rect2(0, top, field_rect.size.x, reference_top - top)
 	var beside_reference := Rect2(
 			reference_right, top, field_rect.size.x - reference_right, field_rect.size.y - top
@@ -285,53 +296,45 @@ func _field_units_per_pixel(area_size: Vector2) -> float:
 	return maxf(FIELD_PROJECTION_SIZE.x / available.x, FIELD_PROJECTION_SIZE.y / available.y)
 
 
-func _sync_reference_top() -> void:
-	if _reference_detail.visible:
-		_reference_panel.offset_top = _lesson.get_rect().end.y + LESSON_REFERENCE_GAP
-
-
 func _toggle_lesson(expanded: bool) -> void:
 	_lesson_details.visible = expanded
 	_lesson_toggle.text = "⌃" if expanded else "⌄"
 	_lesson_toggle.tooltip_text = "Свернуть задание" if expanded else "Развернуть задание"
 	if expanded:
 		_lesson.set_anchor_and_offset(
-				SIDE_BOTTOM, 1.0, _reference_compact_top - LESSON_REFERENCE_GAP
+				SIDE_BOTTOM, 1.0, _reference_toggle.offset_top - LESSON_REFERENCE_GAP
 		)
-		if _reference_detail.visible:
-			_close_reference()
+		_reference_toggle.button_pressed = false
 	else:
 		_lesson.set_anchor_and_offset(SIDE_BOTTOM, 0.0, _lesson.offset_top)
 
 
+func _toggle_reference(expanded: bool) -> void:
+	_reference_panel.visible = expanded
+	_reference_toggle.text = "Справка ▾" if expanded else "Справка ▴"
+	if expanded:
+		_lesson_toggle.button_pressed = false
+		_show_reference_sections()
+
+
 func _open_reference(article: String) -> void:
-	_lesson_toggle.button_pressed = false
-	_reference_article.text = article
-	_reference_article.scroll_to_line(0)
-	await _animate_reference(true)
+	_reference_template = article
+	_update_reference_article()
+	_reference_sections.hide()
 	_reference_detail.show()
-	_sync_reference_top()
+	_reference_article.scroll_to_line(0)
 
 
-func _close_reference() -> void:
-	await _animate_reference(false)
+func _show_reference_sections() -> void:
+	_reference_detail.hide()
 	_reference_sections.show()
 
 
-func _animate_reference(expanded: bool) -> void:
-	_lesson_toggle.disabled = true
-	_reference_sections.hide()
-	_reference_detail.hide()
-	await get_tree().process_frame
-	var top_anchor := 0.0 if expanded else 1.0
-	var top_offset := (
-			_lesson.get_rect().end.y + LESSON_REFERENCE_GAP if expanded else _reference_compact_top
-	)
-	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(_reference_panel, "anchor_top", top_anchor, REFERENCE_ANIMATION_DURATION)
-	tween.tween_property(_reference_panel, "offset_top", top_offset, REFERENCE_ANIMATION_DURATION)
-	await tween.finished
-	_lesson_toggle.disabled = false
+func _update_reference_article() -> void:
+	_reference_article.text = _reference_template.format({
+		"upper": _field.get_delivery_color(SorterField.ZONE_CELL),
+		"lower": _field.get_delivery_color(SorterField.BLUE_ZONE_CELL),
+	})
 
 
 func _draw_editor_divider(drag_area: Control) -> void:
@@ -424,6 +427,8 @@ func _on_accept_order_pressed() -> void:
 
 func _accept_next_order() -> void:
 	_field.swap_delivery_zones()
+	if _reference_detail.is_visible_in_tree():
+		_update_reference_article()
 	_order_color = SECOND_ORDER_COLOR
 	_field.preferred_cargo_color = _order_color
 	_order_deliveries = 0

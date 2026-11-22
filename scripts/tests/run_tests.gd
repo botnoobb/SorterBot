@@ -34,14 +34,19 @@ func _run() -> void:
 	var camera_zoom_requested := arguments.has("--camera-zoom")
 	var order_progress_requested := arguments.has("--order-progress")
 	var evolve_program_requested := arguments.has("--evolve-program")
+	var reference_requested := arguments.has("--learning-reference")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
 			or order_progress_requested or cargo_generation_requested or evolve_program_requested
+			or reference_requested
 	):
 		if cargo_generation_requested:
 			_test_cargo_generation()
+		elif reference_requested:
+			await _test_reference_panel()
+			await _test_while()
 		elif evolve_program_requested:
 			await _test_step_order_acceptance()
 		elif order_progress_requested:
@@ -570,8 +575,7 @@ func _test_functions() -> void:
 			await process_frame
 
 	var reference := game.get_node("ReferencePanel")
-	_click_reference_button(reference.get_node("Content/Sections/Functions"))
-	await create_timer(0.3).timeout
+	await _open_reference_section(game, "Functions")
 	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
 	_expect(article.get_parsed_text().contains("def travel(direction):"),
 			"Справка содержит пример функции с параметром")
@@ -717,32 +721,33 @@ func _test_while() -> void:
 
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
+	var progress: Label = game.get_node("Lesson/Content/OrderProgress")
+	var reference: Panel = game.get_node("ReferencePanel")
+	await _open_reference_section(game, "While")
+	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
+	code.text = article.text.get_slice("\n\n", 2)
+	_expect(
+			article.is_visible_in_tree() and code.text.contains("while True:")
+			and article.text.contains("Когда заказ выполнен"),
+			"Справка объясняет, как завершить заказ встроенным циклом"
+	)
+	var reference_toggle: Button = game.get_node("ReferenceToggle")
+	reference_toggle.button_pressed = false
 	var zones: Array[Vector2i] = []
 	field.cargo_delivered.connect(func(_color_name: String) -> void:
 		zones.append(robot.cell)
-		if zones.size() == 2:
+		if progress.text == "Заказ выполнен: 3 из 3 оранжевых":
 			stop.pressed.emit()
 	)
-	code.text = (
-			START_TO_INPUT + 'while True:\n    color = get_box_color()\n    grab()\n'
-			+ '    move("right")\n    move("right")\n    move("right")\n    move("right")\n'
-			+ '    move("down")\n    move("down")\n    if color == "orange":\n'
-			+ '        put()\n    else:\n        move("down")\n        put()\n'
-			+ '        move("up")\n    move("up")\n    move("up")\n'
-			+ '    move("left")\n    move("left")\n    move("left")\n    move("left")'
-	)
 	run.pressed.emit()
-	deadline = create_timer(18.0)
+	deadline = create_timer(60.0)
 	while not stop.disabled and deadline.time_left > 0.0:
 		await process_frame
-	_expect(stop.disabled and zones == [SorterField.ZONE_CELL, SorterField.BLUE_ZONE_CELL],
-			"Один запуск while доставляет две коробки в разные зоны")
-	var reference: Panel = game.get_node("ReferencePanel")
-	_click_reference_button(reference.get_node("Content/Sections/While"))
-	await create_timer(0.4).timeout
-	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
-	_expect(article.is_visible_in_tree() and article.text.contains(code.text),
-			"В справке показана проверенная программа повторной доставки")
+	_expect(
+			stop.disabled and progress.text == "Заказ выполнен: 3 из 3 оранжевых"
+			and zones.has(SorterField.ZONE_CELL) and zones.has(SorterField.BLUE_ZONE_CELL),
+			"Встроенный пример завершает первый заказ и доставляет коробки обоих цветов"
+	)
 	game.queue_free()
 	await process_frame
 
@@ -824,8 +829,7 @@ func _test_conditions() -> void:
 		await process_frame
 	_expect(lines == [1, 3], "Ложное условие без else пропускает блок и продолжает программу")
 	var reference: Panel = game.get_node("ReferencePanel")
-	_click_reference_button(reference.get_node("Content/Sections/Conditions"))
-	await create_timer(0.4).timeout
+	await _open_reference_section(game, "Conditions")
 	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
 	_expect(article.is_visible_in_tree() and article.text.contains('if color == "orange":'),
 			"Учебный пример условий доступен в справке")
@@ -867,11 +871,12 @@ func _test_variables() -> void:
 			"Новый запуск не наследует переменные")
 	_expect(code.get_line_background_color(0).a > 0, "Неизвестная переменная выделяет строку")
 	var reference: Panel = game.get_node("ReferencePanel")
-	_click_reference_button(reference.get_node("Content/Sections/Output"))
-	await create_timer(0.4).timeout
+	await _open_reference_section(game, "Output")
 	var article: RichTextLabel = reference.get_node("Content/Detail/Article")
 	_expect(article.is_visible_in_tree() and article.text.contains("saved = color"),
 			"Справка объясняет сохранение и копирование значения")
+	_expect(article.text.contains("Как читать ошибки") and article.text.contains("номер строки"),
+			"В справке объяснены диагностика и переход к строке")
 	game.queue_free()
 	await process_frame
 
@@ -1238,6 +1243,21 @@ func _verify_evolved_program(game: Control, old_program: String) -> void:
 			"Карточка подсказывает, как обновить маршруты, и сохраняет объяснение первого урока"
 	)
 	toggle.button_pressed = false
+	await _open_reference_section(game, "While")
+	var article: RichTextLabel = game.get_node("ReferencePanel/Content/Detail/Article")
+	_expect(article.text.contains('if color == "blue":'), "Цикл учитывает новый порядок зон")
+	await _open_reference_section(game, "Functions")
+	_expect(
+			article.text.contains('if color == "blue":')
+			and article.text.contains('if zone == "orange":'),
+			"Примеры функций и return учитывают новый порядок зон"
+	)
+	await _open_reference_section(game, "Conditions")
+	var inline_program := article.text.get_slice("\n\n", 2)
+	_expect(inline_program.contains('if color == "blue":'),
+			"Условие открывается с новым маршрутом")
+	var reference_toggle: Button = game.get_node("ReferenceToggle")
+	reference_toggle.button_pressed = false
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
 	var code: CodeEdit = content.get_node("Code")
 	var run: Button = content.get_node("Header/Run")
@@ -1257,7 +1277,6 @@ func _verify_evolved_program(game: Control, old_program: String) -> void:
 	field.cargo_delivered.connect(func(_color_name: String) -> void:
 		delivered_cells.append(robot.cell)
 	)
-	var inline_program := old_program.replace('== "orange"', '== "blue"')
 	var function_program := (
 			'def put_in_zone(color):\n    if color == "blue":\n        put()\n'
 			+ '    else:\n        move("down")\n        put()\n'
@@ -1417,17 +1436,19 @@ func _test_reference_panel() -> void:
 	root.add_child(game)
 	await process_frame
 	var panel: Panel = game.get_node_or_null("ReferencePanel")
-	_expect(panel != null and panel.visible, "Справка доступна при запуске сцены")
-	if panel == null:
+	var toggle: Button = game.get_node_or_null("ReferenceToggle")
+	_expect(panel != null and not panel.visible and toggle != null and toggle.visible,
+			"При запуске видна только кнопка справки")
+	if panel == null or toggle == null:
 		game.queue_free()
 		return
 
 	var code: CodeEdit = game.get_node("Layout/ProgramEditor/Margin/Content/Code")
 	var field: Control = game.get_node("Layout/Field")
-	var sections: VBoxContainer = panel.get_node("Content/Sections")
+	var sections: ScrollContainer = panel.get_node("Content/Sections")
 	var detail: VBoxContainer = panel.get_node("Content/Detail")
 	var article: RichTextLabel = detail.get_node("Article")
-	var movement: Button = sections.get_node("Movement")
+	var movement: Button = sections.get_node("List/Movement")
 	var back: Button = detail.get_node("Back")
 	var source := "print('Строка')\n".repeat(80)
 	code.text = source
@@ -1439,31 +1460,52 @@ func _test_reference_panel() -> void:
 	var scroll := code.scroll_vertical
 	var field_rect := field.get_global_rect()
 	var code_rect := code.get_global_rect()
+	var camera: Camera3D = field.get_node("Viewport/World/Camera")
+	var camera_size := camera.size
+	var camera_offset := Vector2(camera.h_offset, camera.v_offset)
+	_click_reference_button(toggle)
+	await process_frame
 	var compact_rect := panel.get_global_rect()
-	var title: Label = panel.get_node("Content/Title")
-	var output: Button = sections.get_node("Output")
-	_expect(title.get_global_rect().position.y >= compact_rect.position.y + 8,
-			"Между заголовком справки и рамкой есть отступ")
-	_expect(output.get_global_rect().end.y <= compact_rect.end.y - 8,
-			"Последний раздел целиком помещается внутри карточки")
-
+	_expect(panel.visible and sections.visible and compact_rect.end.y < toggle.global_position.y,
+			"Список разделов открывается над кнопкой")
+	_expect(panel.size.x <= 320.0 and panel.size.y <= field.size.y * 0.4,
+			"Выпадающая справка укладывается в согласованные размеры")
 	_click_reference_button(movement)
-	_expect(not detail.visible, "Текст появляется после раскрытия")
-	await create_timer(0.4).timeout
+	await process_frame
 	_expect(detail.visible and article.text.contains('move("up")'), "В справке есть пример")
-	_expect(panel.size.y > compact_rect.size.y, "Карточка раскрывается вверх")
-	_expect(is_equal_approx(panel.get_global_rect().end.y, compact_rect.end.y),
-			"Нижний край карточки закреплён")
+	_expect(panel.get_global_rect() == compact_rect, "Статья открывается в том же окне")
 	_expect(field.get_global_rect() == field_rect, "При раскрытии поле остаётся на месте")
 	_click_reference_button(back)
-	await create_timer(0.4).timeout
+	await process_frame
 	_expect(sections.visible and panel.get_global_rect() == compact_rect, "Возврат к списку")
+	await _open_reference_section(game, "Output")
+	article.scroll_to_line(article.get_line_count() - 1)
+	_expect(article.get_v_scroll_bar().value > 0.0 and panel.get_global_rect() == compact_rect,
+			"Длинная статья прокручивается внутри окна")
+	_click_reference_button(toggle)
+	_expect(not panel.visible, "Повторное нажатие сворачивает справку")
+	_expect(camera.size == camera_size
+			and Vector2(camera.h_offset, camera.v_offset) == camera_offset,
+			"Открытие и закрытие справки сохраняют кадр поля")
 	_expect(code.text == source and code.get_caret_line() == 40 and code.get_caret_column() == 5,
 			"Справка сохраняет текст и курсор")
 	_expect(code.scroll_vertical == scroll and code.has_focus(), "Сохраняются прокрутка и фокус")
 	_expect(code.get_global_rect() == code_rect, "Редактор остаётся на месте")
 	_expect(field.get_global_rect() == field_rect, "При сворачивании поле остаётся на месте")
 	game.queue_free()
+	await process_frame
+
+
+func _open_reference_section(game: Control, section_name: String) -> void:
+	var toggle: Button = game.get_node("ReferenceToggle")
+	toggle.button_pressed = false
+	_click_reference_button(toggle)
+	await process_frame
+	var sections: ScrollContainer = game.get_node("ReferencePanel/Content/Sections")
+	var section: Button = sections.get_node("List/" + section_name)
+	sections.ensure_control_visible(section)
+	await process_frame
+	_click_reference_button(section)
 	await process_frame
 
 

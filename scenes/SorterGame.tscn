@@ -211,7 +211,7 @@ visible = false
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_font_sizes/normal_font_size = 16
-text = "В первом заказе доставляйте коробки в зоны их цвета.
+text = "В первом заказе доставляйте коробки в зоны их цвета. Если уже знаете команды, запустите свой код или откройте пример «Цикл while» в справке.
 
 Прочитайте шаг и сверните карточку стрелкой ↑, чтобы лучше видеть поле. Урок можно открыть снова в любой момент.
 
@@ -244,15 +244,30 @@ put()
 
 Запустите её и нажмите «Стоп» (■) во время движения. Робот закончит текущую команду и остановится. Нажмите «Начать текущий груз заново». Выполните первую строку кнопкой «Шаг», дождитесь паузы и нажмите «Запустить». Робот продолжит со следующей строки и доставит коробку."
 
+[node name="ReferenceToggle" type="Button" parent="."]
+layout_mode = 1
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -56.0
+offset_right = 148.0
+offset_bottom = -16.0
+theme = ExtResource("5")
+theme_type_variation = &"ReferenceButton"
+focus_mode = 0
+toggle_mode = true
+text = "Справка ▴"
+
 [node name="ReferencePanel" type="Panel" parent="."]
+visible = false
 clip_contents = true
 layout_mode = 1
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = -310.0
-offset_right = 244.0
-offset_bottom = -16.0
+offset_top = -64.0
+offset_right = 336.0
+offset_bottom = -64.0
 theme = ExtResource("5")
 theme_override_styles/panel = SubResource("StyleBoxFlat_reference")
 
@@ -267,59 +282,53 @@ offset_right = -8.0
 offset_bottom = -8.0
 theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="ReferencePanel/Content"]
-layout_mode = 2
-theme_type_variation = &"HeaderLabel"
-text = "Справка"
-
-[node name="Sections" type="VBoxContainer" parent="ReferencePanel/Content"]
+[node name="Sections" type="ScrollContainer" parent="ReferencePanel/Content"]
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="ReferencePanel/Content/Sections"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="Movement" type="Button" parent="ReferencePanel/Content/Sections"]
+[node name="Movement" type="Button" parent="ReferencePanel/Content/Sections/List"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Движение"
 alignment = 0
 
-[node name="Cargo" type="Button" parent="ReferencePanel/Content/Sections"]
+[node name="Cargo" type="Button" parent="ReferencePanel/Content/Sections/List"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Работа с коробкой"
 alignment = 0
 
-[node name="Output" type="Button" parent="ReferencePanel/Content/Sections"]
+[node name="Output" type="Button" parent="ReferencePanel/Content/Sections/List"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
-text = "Вывод"
+text = "Переменные и вывод"
 alignment = 0
 
-[node name="Conditions" type="Button" parent="ReferencePanel/Content/Sections"]
+[node name="Conditions" type="Button" parent="ReferencePanel/Content/Sections/List"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Условия"
 alignment = 0
 
-[node name="While" type="Button" parent="ReferencePanel/Content/Sections"]
+[node name="While" type="Button" parent="ReferencePanel/Content/Sections/List"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Цикл while"
 alignment = 0
 
-[node name="Functions" type="Button" parent="ReferencePanel/Content/Sections"]
+[node name="Functions" type="Button" parent="ReferencePanel/Content/Sections/List"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_type_variation = &"ReferenceButton"
 focus_mode = 0
 text = "Функции"
