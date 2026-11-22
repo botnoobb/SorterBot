@@ -13,18 +13,20 @@ var _error_line: int = -1
 var _running: bool = false
 var _execution_line: int = -1
 
-@onready var _code: CodeEdit = $Margin/Content/Code
+@onready var _editor_split: VSplitContainer = $Margin/Content/EditorSplit
+@onready var _code: CodeEdit = $Margin/Content/EditorSplit/Code
 @onready var _run_button: Button = $Margin/Content/Header/Run
 @onready var _step_button: Button = $Margin/Content/Header/Step
 @onready var _stop_button: Button = $Margin/Content/Header/Stop
 @onready var _reset_cargo_button: Button = $Margin/Content/ResetCargo
 @onready var _message: Label = $Margin/Content/Message
-@onready var _output: OutputPanel = $Margin/Content/OutputPanel
+@onready var _output: OutputPanel = $Margin/Content/EditorSplit/OutputPanel
 
 
 func _ready() -> void:
 	_code.syntax_highlighter = ProgramSyntaxHighlighter.new()
 	_output.error_location_clicked.connect(_on_error_location_clicked)
+	_output.collapse_changed.connect(_on_output_collapse_changed)
 	_run_button.pressed.connect(_on_run_pressed)
 	_stop_button.pressed.connect(_on_stop_pressed)
 	_code.text_changed.connect(_on_text_changed)
@@ -118,6 +120,14 @@ func _clear_error_line() -> void:
 		for line: int in range(_code.get_line_count()):
 			_code.set_line_background_color(line, Color(0, 0, 0, 0))
 	_error_line = -1
+
+
+func _on_output_collapse_changed(collapsed: bool) -> void:
+	_editor_split.collapsed = collapsed
+	_editor_split.dragger_visibility = (
+			SplitContainer.DRAGGER_HIDDEN_COLLAPSED
+			if collapsed else SplitContainer.DRAGGER_VISIBLE
+	)
 
 
 func _on_error_location_clicked(line: int, column: int) -> void:

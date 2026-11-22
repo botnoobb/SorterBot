@@ -35,15 +35,18 @@ func _run() -> void:
 	var order_progress_requested := arguments.has("--order-progress")
 	var evolve_program_requested := arguments.has("--evolve-program")
 	var reference_requested := arguments.has("--learning-reference")
+	var output_panel_requested := arguments.has("--output-panel")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
 			or order_progress_requested or cargo_generation_requested or evolve_program_requested
-			or reference_requested
+			or reference_requested or output_panel_requested
 	):
 		if cargo_generation_requested:
 			_test_cargo_generation()
+		elif output_panel_requested:
+			await _test_output_panel()
 		elif reference_requested:
 			await _test_reference_panel()
 			await _test_while()
@@ -84,6 +87,7 @@ func _run() -> void:
 	await _test_execution()
 	await _test_diagnostics()
 	await _test_scene()
+	await _test_output_panel()
 	await _test_robot_turns()
 	await _test_camera_zoom()
 	await _test_camera_drag()
@@ -159,11 +163,11 @@ func _test_robot_turns() -> void:
 	root.add_child(game)
 	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
-	var messages: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var messages: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var spawn_pose: Transform3D = robot.transform
 
 	code.text = "move('down')\nmove('right')\nmove('down')"
@@ -501,8 +505,8 @@ func _test_functions() -> void:
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
-	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
+	var output: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var run: Button = content.get_node("Header/Run")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
@@ -667,8 +671,8 @@ func _test_while() -> void:
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
-	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
+	var output: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var run: Button = content.get_node("Header/Run")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
@@ -757,7 +761,7 @@ func _test_conditions() -> void:
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
@@ -843,8 +847,8 @@ func _test_variables() -> void:
 	root.add_child(game)
 	await process_frame
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
-	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
+	var output: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var run: Button = content.get_node("Header/Run")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
@@ -1027,17 +1031,17 @@ func _test_first_lesson() -> void:
 	_expect(not details.visible and not toggle.button_pressed, "Задание изначально свёрнуто")
 	_expect(is_equal_approx(lesson.size.y, lesson.get_combined_minimum_size().y),
 			"При запуске свёрнутая карточка занимает только высоту своего содержимого")
-	_click_reference_button(toggle)
+	_click_button(toggle)
 	await process_frame
 	_expect(details.visible and details.text.contains('move("up")'), "В уроке есть первая команда")
 	_expect(details.text.contains(delivery_program), "В уроке есть проверенная программа доставки")
 	_expect(field.get_global_rect() == field_rect, "Карточка задания не сдвигает поле")
-	_click_reference_button(toggle)
+	_click_button(toggle)
 	await process_frame
 	_expect(not details.visible and not toggle.button_pressed, "Шеврон сворачивает задание")
 	_expect(is_equal_approx(lesson.size.y, lesson.get_combined_minimum_size().y),
 			"После сворачивания карточка возвращается к высоте своего содержимого")
-	_click_reference_button(toggle)
+	_click_button(toggle)
 	await process_frame
 	_expect(details.visible, "Урок можно открыть снова")
 	await _play_first_lesson(game, lesson.get_node("Content/Goal"), delivery_program)
@@ -1085,7 +1089,7 @@ func _test_lesson_width(game: Control, lesson: PanelContainer) -> void:
 
 func _play_first_lesson(game: Control, goal: Label, delivery_program: String) -> void:
 	var content := game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
@@ -1142,12 +1146,12 @@ func _test_order_progress() -> void:
 	)
 
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
 	var message: Label = content.get_node("Message")
-	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var output: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var deliver_blue := START_TO_INPUT + "grab()\n" + INPUT_TO_LOWER_ZONE + "put()"
 	var empty_progress := "Заказ: оранжевые коробки — 0 из 3"
 	var first_delivery := "Заказ: оранжевые коробки — 1 из 3"
@@ -1209,7 +1213,7 @@ func _test_step_order_acceptance() -> void:
 	root.add_child(game)
 	await process_frame
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
@@ -1259,11 +1263,11 @@ func _verify_evolved_program(game: Control, old_program: String) -> void:
 	var reference_toggle: Button = game.get_node("ReferenceToggle")
 	reference_toggle.button_pressed = false
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
-	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var output: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
 	reset.pressed.emit()
@@ -1303,12 +1307,12 @@ func _verify_order_acceptance(game: Control, single_step: bool) -> void:
 	var accept_order: Button = game.get_node_or_null("Lesson/Content/AcceptOrder")
 	var rules: Label = game.get_node_or_null("Lesson/Content/OrderRules")
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var step: Button = content.get_node("Header/Step")
 	var stop: Button = content.get_node("Header/Stop")
 	var message: Label = content.get_node("Message")
-	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var output: RichTextLabel = content.get_node("EditorSplit/OutputPanel/Messages")
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
 	if accept_order == null or not accept_order.is_visible_in_tree() or rules == null:
@@ -1443,7 +1447,7 @@ func _test_reference_panel() -> void:
 		game.queue_free()
 		return
 
-	var code: CodeEdit = game.get_node("Layout/ProgramEditor/Margin/Content/Code")
+	var code: CodeEdit = game.get_node("Layout/ProgramEditor/Margin/Content/EditorSplit/Code")
 	var field: Control = game.get_node("Layout/Field")
 	var sections: ScrollContainer = panel.get_node("Content/Sections")
 	var detail: VBoxContainer = panel.get_node("Content/Detail")
@@ -1463,26 +1467,26 @@ func _test_reference_panel() -> void:
 	var camera: Camera3D = field.get_node("Viewport/World/Camera")
 	var camera_size := camera.size
 	var camera_offset := Vector2(camera.h_offset, camera.v_offset)
-	_click_reference_button(toggle)
+	_click_button(toggle)
 	await process_frame
 	var compact_rect := panel.get_global_rect()
 	_expect(panel.visible and sections.visible and compact_rect.end.y < toggle.global_position.y,
 			"Список разделов открывается над кнопкой")
 	_expect(panel.size.x <= 320.0 and panel.size.y <= field.size.y * 0.4,
 			"Выпадающая справка укладывается в согласованные размеры")
-	_click_reference_button(movement)
+	_click_button(movement)
 	await process_frame
 	_expect(detail.visible and article.text.contains('move("up")'), "В справке есть пример")
 	_expect(panel.get_global_rect() == compact_rect, "Статья открывается в том же окне")
 	_expect(field.get_global_rect() == field_rect, "При раскрытии поле остаётся на месте")
-	_click_reference_button(back)
+	_click_button(back)
 	await process_frame
 	_expect(sections.visible and panel.get_global_rect() == compact_rect, "Возврат к списку")
 	await _open_reference_section(game, "Output")
 	article.scroll_to_line(article.get_line_count() - 1)
 	_expect(article.get_v_scroll_bar().value > 0.0 and panel.get_global_rect() == compact_rect,
 			"Длинная статья прокручивается внутри окна")
-	_click_reference_button(toggle)
+	_click_button(toggle)
 	_expect(not panel.visible, "Повторное нажатие сворачивает справку")
 	_expect(camera.size == camera_size
 			and Vector2(camera.h_offset, camera.v_offset) == camera_offset,
@@ -1499,24 +1503,115 @@ func _test_reference_panel() -> void:
 func _open_reference_section(game: Control, section_name: String) -> void:
 	var toggle: Button = game.get_node("ReferenceToggle")
 	toggle.button_pressed = false
-	_click_reference_button(toggle)
+	_click_button(toggle)
 	await process_frame
 	var sections: ScrollContainer = game.get_node("ReferencePanel/Content/Sections")
 	var section: Button = sections.get_node("List/" + section_name)
 	sections.ensure_control_visible(section)
 	await process_frame
-	_click_reference_button(section)
+	_click_button(section)
 	await process_frame
 
 
-func _click_reference_button(button: Button) -> void:
-	var event := InputEventMouseButton.new()
-	event.position = button.get_global_rect().get_center()
-	event.button_index = MOUSE_BUTTON_LEFT
-	event.pressed = true
-	root.push_input(event, true)
-	event.pressed = false
-	root.push_input(event, true)
+func _click_button(button: Button) -> void:
+	var position := button.get_global_rect().get_center()
+	_push_mouse_button(position, MOUSE_BUTTON_LEFT, true)
+	_push_mouse_button(position, MOUSE_BUTTON_LEFT, false)
+
+
+func _test_output_panel() -> void:
+	var game := _instantiate_game_with_known_cargo()
+	root.add_child(game)
+	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
+	var code := editor.find_child("Code", true, false) as CodeEdit
+	var output := editor.find_child("OutputPanel", true, false) as OutputPanel
+	var messages: RichTextLabel = output.get_node("Messages")
+	var toggle: Button = output.get_node("Title")
+	editor.append_output("Первое сообщение")
+	await process_frame
+	await process_frame
+	var initial_output_height := output.size.y
+	_drag_output_boundary(code, output, -game.size.y)
+	await process_frame
+	await process_frame
+	_expect(
+			is_equal_approx(code.size.y, 180.0) and output.size.y > initial_output_height,
+			"Перетаскивание вверх увеличивает вывод и сохраняет минимум поля кода"
+	)
+	_drag_output_boundary(code, output, game.size.y)
+	await process_frame
+	await process_frame
+	_expect(
+			is_equal_approx(output.size.y, 120.0) and code.size.y > 180.0,
+			"Перетаскивание вниз сохраняет минимум панели вывода"
+	)
+	_drag_output_boundary(code, output, -40.0)
+	await process_frame
+	await process_frame
+	_expect(is_equal_approx(output.size.y, 160.0), "Граница следует за мышью")
+	var expanded_code_height := code.size.y
+	_click_button(toggle)
+	await process_frame
+	await process_frame
+	_expect(
+			toggle.is_visible_in_tree() and not messages.is_visible_in_tree()
+			and code.size.y > expanded_code_height,
+			"При сворачивании вывода заголовок остаётся, а поле кода увеличивается"
+	)
+	_click_button(toggle)
+	await process_frame
+	await process_frame
+	_expect(
+			messages.is_visible_in_tree() and messages.get_parsed_text() == "Первое сообщение\n"
+			and is_equal_approx(output.size.y, 160.0),
+			"Повторное раскрытие сохраняет сообщения и выбранную высоту"
+	)
+	_click_button(toggle)
+	editor.append_output("Второе сообщение")
+	_expect(
+			messages.is_visible_in_tree()
+			and messages.get_parsed_text() == "Первое сообщение\nВторое сообщение\n",
+			"Новое сообщение раскрывает свёрнутый вывод и сохраняет предыдущие сообщения"
+	)
+	_click_button(toggle)
+	editor.show_error("Ошибка программы")
+	_expect(
+			messages.is_visible_in_tree()
+			and messages.get_parsed_text().ends_with("Ошибка программы\n"),
+			"Ошибка программы раскрывает свёрнутый вывод"
+	)
+	_click_button(toggle)
+	editor.show_action_error("Ошибка действия")
+	_expect(
+			messages.is_visible_in_tree()
+			and messages.get_parsed_text().ends_with("Ошибка действия\n"),
+			"Ошибка действия раскрывает свёрнутый вывод"
+	)
+	_click_button(toggle)
+	var previous_output := messages.get_parsed_text()
+	code.text = "print('Новый запуск')"
+	_expect(
+			not messages.is_visible_in_tree() and messages.get_parsed_text() == previous_output,
+			"Правка программы сохраняет свёрнутый вывод"
+	)
+	var run: Button = editor.get_node("Margin/Content/Header/Run")
+	_click_button(run)
+	_expect(
+			messages.is_visible_in_tree() and messages.get_parsed_text() == "Новый запуск\n",
+			"Новый запуск очищает свёрнутый вывод и показывает новые сообщения"
+	)
+	game.queue_free()
+	await process_frame
+
+
+func _drag_output_boundary(code: CodeEdit, output: OutputPanel, distance: float) -> void:
+	var position := code.get_global_rect().get_center()
+	position.y = (code.get_global_rect().end.y + output.get_global_rect().position.y) * 0.5
+	var motion := Vector2(0.0, distance)
+	_move_mouse_at(position, Vector2.ZERO, 0)
+	_push_mouse_button(position, MOUSE_BUTTON_LEFT, true)
+	_move_mouse_at(position + motion, motion, MOUSE_BUTTON_MASK_LEFT)
+	_push_mouse_button(position + motion, MOUSE_BUTTON_LEFT, false)
 
 
 func _test_scene() -> void:
@@ -1524,7 +1619,7 @@ func _test_scene() -> void:
 	root.add_child(game)
 	await process_frame
 	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
-	var code: CodeEdit = editor.get_node("Margin/Content/Code")
+	var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
 	var button: Button = editor.get_node("Margin/Content/Header/Run")
 	var stop: Button = editor.get_node("Margin/Content/Header/Stop")
 	var robot: SorterRobot = game.get_node("Layout/Field/Viewport/World/Robot")
@@ -1563,7 +1658,7 @@ func _test_scene() -> void:
 	while not stop.disabled:
 		await process_frame
 	_expect(code.get_line_background_color(80).a == 0, "Повторный запуск очищает подсветку")
-	var output: OutputPanel = editor.get_node("Margin/Content/OutputPanel")
+	var output: OutputPanel = editor.get_node("Margin/Content/EditorSplit/OutputPanel")
 	var messages: RichTextLabel = output.get_node("Messages")
 	_expect(not output.visible, "Без вывода панель скрыта")
 	var previous_cell: Vector2i = robot.cell
@@ -1830,7 +1925,7 @@ func _test_input_tray() -> void:
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	var robot: SorterRobot = field.get_node("Robot")
 	var content: Control = game.get_node("Layout/ProgramEditor/Margin/Content")
-	var code: CodeEdit = content.get_node("Code")
+	var code: CodeEdit = content.get_node("EditorSplit/Code")
 	var run: Button = content.get_node("Header/Run")
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
@@ -2058,10 +2153,10 @@ func _test_wrong_delivery() -> void:
 		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 		var robot: SorterRobot = field.get_node("Robot")
 		var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
-		var code: CodeEdit = editor.get_node("Margin/Content/Code")
+		var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
 		var run: Button = editor.get_node("Margin/Content/Header/Run")
 		var step: Button = editor.get_node("Margin/Content/Header/Step")
-		var output: OutputPanel = editor.get_node("Margin/Content/OutputPanel")
+		var output: OutputPanel = editor.get_node("Margin/Content/EditorSplit/OutputPanel")
 		var messages: RichTextLabel = output.get_node("Messages")
 		var executor: ProgramExecutor = game.get("_executor")
 		for sample: Array in [
@@ -2134,11 +2229,12 @@ func _test_reset_cargo() -> void:
 		var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 		var robot: SorterRobot = field.get_node("Robot")
 		var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
-		var code: CodeEdit = editor.get_node("Margin/Content/Code")
+		var code: CodeEdit = editor.get_node("Margin/Content/EditorSplit/Code")
 		var run: Button = editor.get_node("Margin/Content/Header/Run")
 		var step: Button = editor.get_node("Margin/Content/Header/Step")
 		var reset: Button = editor.get_node_or_null("Margin/Content/ResetCargo")
-		var messages: RichTextLabel = editor.get_node("Margin/Content/OutputPanel/Messages")
+		var output: OutputPanel = editor.get_node("Margin/Content/EditorSplit/OutputPanel")
+		var messages: RichTextLabel = output.get_node("Messages")
 		var executor: ProgramExecutor = game.get("_executor")
 		_expect(reset != null, "Есть отдельная кнопка восстановления груза")
 		if reset == null:
@@ -2228,7 +2324,7 @@ func _test_reset_cargo() -> void:
 	var editor: ProgramEditor = game.get_node("Layout/ProgramEditor")
 	var executor: ProgramExecutor = game.get("_executor")
 	_expect(robot.cell == Vector2i(4, 4), "Карта задаёт клетку появления робота")
-	editor.get_node("Margin/Content/Code").text = "move('left')"
+	editor.get_node("Margin/Content/EditorSplit/Code").text = "move('left')"
 	editor.get_node("Margin/Content/Header/Run").pressed.emit()
 	while executor.is_running:
 		await process_frame

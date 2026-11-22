@@ -5,17 +5,15 @@
 
 [node name="OutputPanel" type="VBoxContainer"]
 visible = false
-custom_minimum_size = Vector2(0, 120)
-size_flags_vertical = 3
-size_flags_stretch_ratio = 0.5
 script = ExtResource("1")
 theme = ExtResource("2")
 theme_override_constants/separation = 0
 
-[node name="Title" type="Label" parent="."]
+[node name="Title" type="Button" parent="."]
 layout_mode = 2
-theme_type_variation = &"HeaderLabel"
-text = "Вывод"
+toggle_mode = true
+flat = true
+alignment = 0
 
 [node name="Messages" type="RichTextLabel" parent="."]
 layout_mode = 2

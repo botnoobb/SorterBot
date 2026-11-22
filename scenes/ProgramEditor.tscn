@@ -57,7 +57,13 @@ layout_mode = 2
 text = "Начать текущий груз заново"
 tooltip_text = "Завершить текущую инструкцию, вернуть робота на старт и текущую коробку на выдачу"
 
-[node name="Code" type="CodeEdit" parent="Margin/Content"]
+[node name="EditorSplit" type="VSplitContainer" parent="Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offsets = PackedInt32Array(-60)
+theme_override_constants/autohide = 0
+
+[node name="Code" type="CodeEdit" parent="Margin/Content/EditorSplit"]
 custom_minimum_size = Vector2(0, 180)
 layout_mode = 2
 size_flags_vertical = 3
@@ -65,7 +71,7 @@ theme_override_font_sizes/font_size = 18
 text = ""
 gutters_draw_line_numbers = true
 
-[node name="OutputPanel" parent="Margin/Content" instance=ExtResource("2")]
+[node name="OutputPanel" parent="Margin/Content/EditorSplit" instance=ExtResource("2")]
 layout_mode = 2
 
 [node name="Message" type="Label" parent="Margin/Content"]
