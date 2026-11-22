@@ -8,12 +8,16 @@ signal cargo_reset_requested()
 
 const EXECUTION_COLOR := Color(1.0, 0.85, 0.25, 0.22)
 const OUTPUT_COLLAPSE_DISTANCE := 48.0
+const OUTPUT_EXPAND_DRAG_DISTANCE := 12.0
 const ProgramSyntaxHighlighter = preload("res://scripts/ui/program_syntax_highlighter.gd")
 
 var _error_line: int = -1
 var _running: bool = false
 var _execution_line: int = -1
 var _output_drag_start_offset: int = 0
+var _output_collapsed: bool = false
+var _expanded_output_offset: int = 0
+var _output_drag_start_y: float = -INF
 
 @onready var _editor_split: VSplitContainer = $Margin/Content/EditorSplit
 @onready var _code: CodeEdit = $Margin/Content/EditorSplit/Code
@@ -127,23 +131,37 @@ func _clear_error_line() -> void:
 
 
 func _on_output_collapse_changed(collapsed: bool) -> void:
-	_editor_split.collapsed = collapsed
-	_editor_split.dragger_visibility = (
-			SplitContainer.DRAGGER_HIDDEN_COLLAPSED
-			if collapsed else SplitContainer.DRAGGER_VISIBLE
-	)
+	_output_collapsed = collapsed
+	_output_drag_start_y = -INF
+	if collapsed:
+		_expanded_output_offset = _editor_split.split_offsets[0]
+		_editor_split.split_offsets = PackedInt32Array([0])
+	else:
+		_editor_split.split_offsets = PackedInt32Array([_expanded_output_offset])
 
 
 func _on_output_drag_input(event: InputEvent, drag_area: Control) -> void:
+	if _output_collapsed and (event.is_action_pressed("ui_up", true)
+			or event.is_action_pressed("ui_down", true)):
+		drag_area.accept_event()
 	var button := event as InputEventMouseButton
-	if button == null or button.button_index != MOUSE_BUTTON_LEFT or button.is_canceled():
+	if button == null or button.button_index != MOUSE_BUTTON_LEFT:
 		return
+	if _output_collapsed:
+		drag_area.accept_event()
+	var position := drag_area.get_transform() * button.position
 	if button.pressed:
+		_output_drag_start_y = position.y
 		_output_drag_start_offset = _editor_split.split_offsets[0]
 		return
-	var release_position := drag_area.get_transform() * button.position
-	var distance_to_bottom := _editor_split.size.y - release_position.y
-	if distance_to_bottom <= OUTPUT_COLLAPSE_DISTANCE:
+	var start_y := _output_drag_start_y
+	_output_drag_start_y = -INF
+	if button.is_canceled() or start_y == -INF:
+		return
+	if _output_collapsed:
+		if start_y - position.y >= OUTPUT_EXPAND_DRAG_DISTANCE:
+			_output.set_collapsed(false)
+	elif _editor_split.size.y - position.y <= OUTPUT_COLLAPSE_DISTANCE:
 		# Разделитель сначала должен обработать отпускание кнопки.
 		_collapse_output_after_drag.call_deferred(_output_drag_start_offset)
 

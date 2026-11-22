@@ -1545,7 +1545,7 @@ func _test_output_panel() -> void:
 			is_equal_approx(output.size.y, 120.0) and code.size.y > 180.0,
 			"Перетаскивание вниз сохраняет минимум панели вывода"
 	)
-	await _drag_output_boundary(code, output, -40.0)
+	await _drag_output_boundary(code, output, -40.0, -8.0)
 	_expect(is_equal_approx(output.size.y, 160.0), "Граница следует за мышью")
 	var expanded_code_height := code.size.y
 	await _drag_output_boundary(code, output, output.size.y - 24.0)
@@ -1563,17 +1563,36 @@ func _test_output_panel() -> void:
 			and is_equal_approx(output.size.y, 160.0),
 			"Повторное раскрытие сохраняет сообщения и выбранную высоту"
 	)
+	_click_button(toggle)
+	await process_frame
+	await process_frame
+	await _drag_output_boundary(code, output, 24.0)
+	_expect(not messages.is_visible_in_tree(), "Движение вниз оставляет вывод свёрнутым")
+	await _drag_output_boundary(code, output, -80.0, 8.0)
+	_expect(
+			messages.is_visible_in_tree() and messages.get_parsed_text() == "Первое сообщение\n"
+			and is_equal_approx(output.size.y, 160.0),
+			"Перетаскивание вверх раскрывает вывод, сохраняя сообщения и высоту"
+	)
 	var down := Vector2(0.0, 2.0)
 	_move_mouse_at(_output_boundary_position(code, output) + down, down, 0)
 	await process_frame
 	await process_frame
 	_expect(is_equal_approx(output.size.y, 160.0), "Наведение на границу не меняет высоту")
 	_click_button(toggle)
+	await process_frame
+	await process_frame
+	var collapsed_boundary := _output_boundary_position(code, output)
+	_push_mouse_button(collapsed_boundary, MOUSE_BUTTON_LEFT, true)
 	editor.append_output("Второе сообщение")
+	await process_frame
+	_push_mouse_button(collapsed_boundary, MOUSE_BUTTON_LEFT, false)
+	await process_frame
+	await process_frame
 	_expect(
 			messages.is_visible_in_tree()
 			and messages.get_parsed_text() == "Первое сообщение\nВторое сообщение\n",
-			"Новое сообщение раскрывает свёрнутый вывод и сохраняет предыдущие сообщения"
+			"Новое сообщение раскрывает вывод даже при удержании разделителя"
 	)
 	_click_button(toggle)
 	editor.show_error("Ошибка программы")
@@ -1606,8 +1625,10 @@ func _test_output_panel() -> void:
 	await process_frame
 
 
-func _drag_output_boundary(code: CodeEdit, output: OutputPanel, distance: float) -> void:
-	var position := _output_boundary_position(code, output)
+func _drag_output_boundary(
+		code: CodeEdit, output: OutputPanel, distance: float, grab_offset: float = 0.0
+) -> void:
+	var position := _output_boundary_position(code, output) + Vector2(0.0, grab_offset)
 	var motion := Vector2(0.0, distance)
 	_move_mouse_at(position, Vector2.ZERO, 0)
 	_push_mouse_button(position, MOUSE_BUTTON_LEFT, true)
