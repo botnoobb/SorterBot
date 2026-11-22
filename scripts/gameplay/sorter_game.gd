@@ -13,6 +13,13 @@ const LESSON_MAX_WIDTH := 380.0
 const FIRST_ORDER_COLOR := "orange"
 const SECOND_ORDER_COLOR := "blue"
 const ORDER_TARGET := 3
+const SECOND_ORDER_LESSON := (
+		"Как обновить программу\n\n"
+		+ "Найдите выбор зоны по цвету в своей программе. Сверьте маршруты с правилами "
+		+ "второго заказа, обновите их и проверьте доставку обоих цветов.\n\n"
+		+ "Если выбор зоны вынесен в функцию, начните с неё. Если маршруты заданы прямо "
+		+ "в ветвях условия, поправьте их там."
+)
 # Габариты проекции рамы, конвейеров и робота с коробкой.
 const FIELD_PROJECTION_SIZE := Vector2(10.1, 5.0)
 const FIELD_PROJECTION_CENTER_X_OFFSET := -0.51
@@ -422,6 +429,8 @@ func _accept_next_order() -> void:
 	_order_deliveries = 0
 	_update_order_progress()
 	_order_rules.text = "Синие коробки — верхняя зона, оранжевые — нижняя."
+	_lesson_details.text = SECOND_ORDER_LESSON + "\n\nПервый урок\n\n" + _lesson_details.text
+	_lesson_details.scroll_to_line(0)
 	_accept_order.hide()
 	_editor.show_message("Заказ принят. Обновите программу и запустите её.")
 	_order_accept_requested = false

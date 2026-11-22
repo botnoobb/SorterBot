@@ -33,14 +33,17 @@ func _run() -> void:
 	var camera_drag_requested := arguments.has("--camera-drag")
 	var camera_zoom_requested := arguments.has("--camera-zoom")
 	var order_progress_requested := arguments.has("--order-progress")
+	var evolve_program_requested := arguments.has("--evolve-program")
 	if (
 			arguments.has("--reset-cargo") or arguments.has("--functions")
 			or arguments.has("--syntax-highlighting") or camera_zoom_requested
 			or camera_drag_requested or robot_turns_requested or delivery_requested or input_tray_requested
-			or order_progress_requested or cargo_generation_requested
+			or order_progress_requested or cargo_generation_requested or evolve_program_requested
 	):
 		if cargo_generation_requested:
 			_test_cargo_generation()
+		elif evolve_program_requested:
+			await _test_step_order_acceptance()
 		elif order_progress_requested:
 			await _test_order_progress()
 			await _test_step_order_acceptance()
@@ -138,11 +141,11 @@ func _test_cargo_weights() -> void:
 	_expect(next_draw_matches, "Смена заказа меняет базовые веса и сохраняет бонусы за пропуски")
 
 
-func _instantiate_game_with_known_cargo() -> Control:
+func _instantiate_game_with_known_cargo(cargo_seed: int = 74) -> Control:
 	var game: Control = preload("res://scenes/SorterGame.tscn").instantiate()
 	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
 	# Начальное значение даёт оба цвета в нужном порядке для проверок маршрутов.
-	field.cargo_random.seed = 74
+	field.cargo_random.seed = cargo_seed
 	return game
 
 
@@ -1196,7 +1199,8 @@ func _test_order_progress() -> void:
 
 
 func _test_step_order_acceptance() -> void:
-	var game := _instantiate_game_with_known_cargo()
+	# В этом сценарии оба цвета поступают по два раза после смены правил.
+	var game := _instantiate_game_with_known_cargo(75)
 	root.add_child(game)
 	await process_frame
 	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
@@ -1204,17 +1208,75 @@ func _test_step_order_acceptance() -> void:
 	var run: Button = content.get_node("Header/Run")
 	var stop: Button = content.get_node("Header/Stop")
 	var reset: Button = content.get_node("ResetCargo")
-	for destination: String in [
-		INPUT_TO_ORANGE, INPUT_TO_LOWER_ZONE, INPUT_TO_ORANGE, INPUT_TO_LOWER_ZONE, INPUT_TO_ORANGE,
-	]:
-		code.text = START_TO_INPUT + "grab()\n" + destination + "put()"
+	var old_program := (
+			START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE
+			+ 'if get_box_color() == "orange":\n    put()\nelse:\n    move("down")\n    put()'
+	)
+	code.text = old_program
+	for delivery: int in range(5):
 		if not await _run_order_program(run, stop):
 			_expect(false, "Первый заказ выполнен перед проверкой пошагового принятия")
 			break
 		reset.pressed.emit()
 	await _verify_order_acceptance(game, true)
+	await _verify_evolved_program(game, old_program)
 	game.queue_free()
 	await process_frame
+
+
+func _verify_evolved_program(game: Control, old_program: String) -> void:
+	var lesson: PanelContainer = game.get_node("Lesson")
+	var toggle: Button = lesson.get_node("Content/Header/Toggle")
+	var details: RichTextLabel = lesson.get_node("Content/Details")
+	var progress: Label = lesson.get_node("Content/OrderProgress")
+	toggle.button_pressed = true
+	await process_frame
+	_expect(
+			details.is_visible_in_tree() and details.text.begins_with("Как обновить программу")
+			and details.text.contains("выбор зоны по цвету")
+			and details.text.contains("функцию") and details.text.contains(DELIVER_ORANGE),
+			"Карточка подсказывает, как обновить маршруты, и сохраняет объяснение первого урока"
+	)
+	toggle.button_pressed = false
+	var content: VBoxContainer = game.get_node("Layout/ProgramEditor/Margin/Content")
+	var code: CodeEdit = content.get_node("Code")
+	var run: Button = content.get_node("Header/Run")
+	var stop: Button = content.get_node("Header/Stop")
+	var reset: Button = content.get_node("ResetCargo")
+	var output: RichTextLabel = content.get_node("OutputPanel/Messages")
+	var field: SorterField = game.get_node("Layout/Field/Viewport/World")
+	var robot: SorterRobot = field.get_node("Robot")
+	reset.pressed.emit()
+	_expect(
+			code.text == old_program and await _run_order_program(run, stop)
+			and output.get_parsed_text().contains("нужна зона blue")
+			and progress.text == "Заказ: синие коробки — 0 из 3",
+			"Сохранённая программа со старыми маршрутами требует правки для второго заказа"
+	)
+	var delivered_cells: Array[Vector2i] = []
+	field.cargo_delivered.connect(func(_color_name: String) -> void:
+		delivered_cells.append(robot.cell)
+	)
+	var inline_program := old_program.replace('== "orange"', '== "blue"')
+	var function_program := (
+			'def put_in_zone(color):\n    if color == "blue":\n        put()\n'
+			+ '    else:\n        move("down")\n        put()\n'
+			+ START_TO_INPUT + "grab()\n" + INPUT_TO_ORANGE + "put_in_zone(get_box_color())"
+	)
+	for program: String in [inline_program, function_program]:
+		delivered_cells.clear()
+		code.text = program
+		for delivery: int in range(2):
+			reset.pressed.emit()
+			if not await _run_order_program(run, stop):
+				break
+		var expected := "1 из 3" if program == inline_program else "2 из 3"
+		_expect(
+				delivered_cells == [SorterField.ZONE_CELL, SorterField.BLUE_ZONE_CELL]
+				and progress.text == "Заказ: синие коробки — " + expected,
+				"Корректная программа с %s доставляет коробки обоих цветов"
+				% ("условием" if program == inline_program else "функцией")
+		)
 
 
 func _verify_order_acceptance(game: Control, single_step: bool) -> void:
@@ -1249,7 +1311,7 @@ func _verify_order_acceptance(game: Control, single_step: bool) -> void:
 				and progress.text == "Заказ выполнен: 3 из 3 оранжевых",
 				"Будущая клетка синей зоны отклоняет синюю коробку до принятия заказа"
 		)
-	var source := 'move("up")\nmove("up")\nprint("Старый запуск")'
+	var source := code.text if single_step else 'move("up")\nmove("up")\nprint("Старый запуск")'
 	var cargo_color := field.get_box_color()
 	var was_carrying := field.carrying
 	var held_box: Node3D
